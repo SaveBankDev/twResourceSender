@@ -47,6 +47,8 @@ defaultSettings = {
     'sbArrivalTimes': []
 };
 // CONSTANTS
+var merchantSpeed = 6;
+var merchantSpeedWithBonus = 4;
 var allIdsRS = [
     'sbOriginGroupSelection',
     'sbOriginCustomSelection',
@@ -226,14 +228,13 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         }
         */
         const groups = await fetchVillageGroups();
-        const { tribes, players, villages } = await fetchWorldConfigData();
+        const { villages, worldConfig } = await fetchWorldConfigData();
         const villageIdToCoordMap = createVillageMap(villages);
         const playerData = await getPlayerData();
         if(DEBUG) console.debug(`${scriptInfo}: Player data:`, playerData);
         const endTime = performance.now();
         if (DEBUG) console.debug(`${scriptInfo}: Startup time: ${(endTime - startTime).toFixed(2)} milliseconds`);
-        if (DEBUG) console.debug(`${scriptInfo}: `, tribes);
-        if (DEBUG) console.debug(`${scriptInfo}: `, players);
+        if (DEBUG) console.debug(`${scriptInfo}: `, worldConfig);
         if (DEBUG) console.debug(`${scriptInfo}: `, villages);
         // Entry point
         (async function () {
@@ -1003,9 +1004,12 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
             }
         
             // Get origin and target villages
-            const originVillages = localStorageObject.sbOriginCustomSelection ? localStorageObject.sbCustomOriginVillages.split(' ') : await getPlayerData();
-            const targetVillages = localStorageObject.sbTargetCustomSelection ? localStorageObject.sbCustomTargetVillages.split(' ') : await getPlayerData();
-        
+            const originVillages = localStorageObject.sbOriginCustomSelection ? localStorageObject.sbCustomOriginVillages.split(' ') : await getVillagesByGroupId(localStorageObject.sbOriginGroupsFilter);
+            const targetVillages = localStorageObject.sbTargetCustomSelection ? localStorageObject.sbCustomTargetVillages.split(' ') : await getVillagesByGroupId(localStorageObject.sbTargetGroupsFilter);
+            
+            if(DEBUG) console.debug(`${scriptInfo}: Origin Villages from Custom Selection? ${localStorageObject.sbOriginCustomSelection}:`, originVillages);
+            if(DEBUG) console.debug(`${scriptInfo}: Target Villages from Custom Selection? ${localStorageObject.sbTargetCustomSelection}:`, targetVillages);
+
             // Determine which calculation function to call based on the selected radio button
             if (localStorageObject.sbSendResourcesAbsoluteRadio) {
                 calculateAbsoluteResources(originVillages, targetVillages);
@@ -1020,18 +1024,602 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
 
         // Function to calculate sending absolute resources
         function calculateAbsoluteResources(originVillages, targetVillages) {
+            const localStorageObject = getLocalStorage();
+            const merchantBonus = parseBool(localStorageObject.sbMerchantBonus);
+            const holdBackMerchants = Number(localStorageObject.sbHoldBackMerchants);
+            const holdBackResourcesAbsolute = parseBool(localStorageObject.sbHoldBackResourcesAbsoluteRadio);
+            const holdBackResourcesPercentage = parseBool(localStorageObject.sbHoldBackResourcesPercentageRadio);
+            const holdBackWood = Number(localStorageObject.sbHoldBackWood);
+            const holdBackClay = Number(localStorageObject.sbHoldBackClay);
+            const holdBackIron = Number(localStorageObject.sbHoldBackIron);
+            const holdBackPercentage = Number(localStorageObject.sbHoldBackPercentage);
+            const maxWood = Number(localStorageObject.sbMaxWood);
+            const maxClay = Number(localStorageObject.sbMaxClay);
+            const maxIron = Number(localStorageObject.sbMaxIron);
+            const arrivalTimes = getLocalStorage().sbArrivalTimes;
+        
+            // Absolute numbers
+            const woodToSend = Number(localStorageObject.sbSendWood);
+            const clayToSend = Number(localStorageObject.sbSendClay);
+            const ironToSend = Number(localStorageObject.sbSendIron);
+        
+            const merchantCapacity = merchantBonus ? 1500 : 1000;
+        
+            // Step 1: Create a copy of the player data object and adjust for hold back merchants and resources
+            const playerDataCopy = JSON.parse(JSON.stringify(playerData));
+            playerDataCopy.forEach(village => {
+                village.availableMerchants = Math.max(0, village.availableMerchants - holdBackMerchants);
+                if (holdBackResourcesAbsolute) {
+                    village.wood = Math.max(0, village.wood - holdBackWood);
+                    village.clay = Math.max(0, village.clay - holdBackClay);
+                    village.iron = Math.max(0, village.iron - holdBackIron);
+                } else if (holdBackResourcesPercentage) {
+                    const holdBackAmount = village.warehouseCapacity * (holdBackPercentage / 100);
+                    village.wood = Math.max(0, village.wood - holdBackAmount);
+                    village.clay = Math.max(0, village.clay - holdBackAmount);
+                    village.iron = Math.max(0, village.iron - holdBackAmount);
+                }
+            });
+        
+            // Remove entries where the coordinate is not in originVillages
+            const filteredPlayerData = playerDataCopy.filter(village => originVillages.includes(village.coord));
+        
+            // Step 2: Remove villages with 0 resources, 0 available merchants, or not enough resources to meet the absolute numbers
+            const validVillages = filteredPlayerData.filter(village => {
+                const totalMerchantCapacity = village.availableMerchants * merchantCapacity;
+                const totalResourcesToSend = woodToSend + clayToSend + ironToSend;
+                return (
+                    village.wood >= woodToSend &&
+                    village.clay >= clayToSend &&
+                    village.iron >= ironToSend &&
+                    village.availableMerchants > 0 &&
+                    totalResourcesToSend <= totalMerchantCapacity
+                );
+            });
+        
+            // Initialize remaining resources for each target village
+            const targetVillageResources = {};
+            targetVillages.forEach(targetVillage => {
+                targetVillageResources[targetVillage] = {
+                    wood: maxWood,
+                    clay: maxClay,
+                    iron: maxIron
+                };
+            });
+        
+            // Step 3: Calculate possible origin to target village pairs based on arrival times
+            const currentTime = Date.now();
+            const originTargetPairs = {};
+        
+            validVillages.forEach(originVillage => {
+                const possibleTargets = targetVillages.map(targetVillage => {
+                    const travelTime = calculateTravelTime(originVillage.coord, targetVillage, merchantBonus);
+                    const arrivalTime = currentTime + travelTime;
+                    const withinArrivalTime = arrivalTimes.some(([start, end]) => arrivalTime >= start && arrivalTime <= end);
+                    return withinArrivalTime ? { coord: targetVillage, travelTime } : null;
+                }).filter(Boolean);
+        
+                if (possibleTargets.length > 0) {
+                    originTargetPairs[originVillage.coord] = possibleTargets.sort((a, b) => a.travelTime - b.travelTime);
+                }
+            });
+        
+            // Step 4: Fill the final transport data array
+            const transportData = [];
+        
+            while (Object.keys(originTargetPairs).length > 0) {
+                const originCoord = Object.keys(originTargetPairs)[0];
+                const originVillage = validVillages.find(village => village.coord === originCoord);
+                const targetVillage = originTargetPairs[originCoord][0]; // Select the target village with the lowest travel time
+        
+                const resourcesToSend = {
+                    wood: Math.min(woodToSend, targetVillageResources[targetVillage.coord].wood),
+                    clay: Math.min(clayToSend, targetVillageResources[targetVillage.coord].clay),
+                    iron: Math.min(ironToSend, targetVillageResources[targetVillage.coord].iron)
+                };
+        
+                if (resourcesToSend.wood > 0 || resourcesToSend.clay > 0 || resourcesToSend.iron > 0) {
+                    transportData.push({
+                        origin: originVillage.coord,
+                        target: targetVillage.coord,
+                        wood: resourcesToSend.wood,
+                        clay: resourcesToSend.clay,
+                        iron: resourcesToSend.iron,
+                        url: originVillage.url,
+                        name: originVillage.name,
+                        id: originVillage.id,
+                        travelTime: originTargetPairs[originCoord][0].travelTime
+                    });
+        
+                    // Update remaining resources for the target village
+                    targetVillageResources[targetVillage.coord].wood -= resourcesToSend.wood;
+                    targetVillageResources[targetVillage.coord].clay -= resourcesToSend.clay;
+                    targetVillageResources[targetVillage.coord].iron -= resourcesToSend.iron;
+        
+                    // Remove target village from all origin villages if it has no more resources remaining
+                    if (
+                        targetVillageResources[targetVillage.coord].wood <= woodToSend ||
+                        targetVillageResources[targetVillage.coord].clay <= clayToSend ||
+                        targetVillageResources[targetVillage.coord].iron <= ironToSend
+                    ) {
+                        Object.keys(originTargetPairs).forEach(originCoord => {
+                            originTargetPairs[originCoord] = originTargetPairs[originCoord].filter(
+                                target => target.coord !== targetVillage.coord
+                            );
+                        });
+                    }
+                }
+        
+                // Remove origin village after assigning it a transport
+                delete originTargetPairs[originCoord];
+            }
+        
+            if (DEBUG) console.debug(`${scriptInfo}: Transport Data:`, transportData);
+        
+            return transportData;
         }
 
         // Function to calculate sending resources as a ratio
         function calculateRatioResources(originVillages, targetVillages) {
+            const localStorageObject = getLocalStorage();
+            const merchantBonus = parseBool(localStorageObject.sbMerchantBonus);
+            const holdBackMerchants = Number(localStorageObject.sbHoldBackMerchants);
+            const holdBackResourcesAbsolute = parseBool(localStorageObject.sbHoldBackResourcesAbsoluteRadio);
+            const holdBackResourcesPercentage = parseBool(localStorageObject.sbHoldBackResourcesPercentageRadio);
+            const holdBackWood = Number(localStorageObject.sbHoldBackWood);
+            const holdBackClay = Number(localStorageObject.sbHoldBackClay);
+            const holdBackIron = Number(localStorageObject.sbHoldBackIron);
+            const holdBackPercentage = Number(localStorageObject.sbHoldBackPercentage);
+            const maxWood = Number(localStorageObject.sbMaxWood);
+            const maxClay = Number(localStorageObject.sbMaxClay);
+            const maxIron = Number(localStorageObject.sbMaxIron);
+            const arrivalTimes = getLocalStorage().sbArrivalTimes;
+        
+            // Ratios
+            const woodRatio = Number(localStorageObject.sbSendWoodRatio) / 100;
+            const clayRatio = Number(localStorageObject.sbSendClayRatio) / 100;
+            const ironRatio = Number(localStorageObject.sbSendIronRatio) / 100;
+        
+            const merchantCapacity = merchantBonus ? 1500 : 1000;
+        
+            // Step 1: Create a copy of the player data object and adjust for hold back merchants and resources
+            const playerDataCopy = JSON.parse(JSON.stringify(playerData));
+            playerDataCopy.forEach(village => {
+                village.availableMerchants = Math.max(0, village.availableMerchants - holdBackMerchants);
+                if (holdBackResourcesAbsolute) {
+                    village.wood = Math.max(0, village.wood - holdBackWood);
+                    village.clay = Math.max(0, village.clay - holdBackClay);
+                    village.iron = Math.max(0, village.iron - holdBackIron);
+                } else if (holdBackResourcesPercentage) {
+                    const holdBackAmount = village.warehouseCapacity * (holdBackPercentage / 100);
+                    village.wood = Math.max(0, village.wood - holdBackAmount);
+                    village.clay = Math.max(0, village.clay - holdBackAmount);
+                    village.iron = Math.max(0, village.iron - holdBackAmount);
+                }
+            });
+        
+            // Remove entries where the coordinate is not in originVillages
+            const filteredPlayerData = playerDataCopy.filter(village => originVillages.includes(village.coord));
+        
+            // Step 2: Remove villages with 0 resources or 0 available merchants
+            const validVillages = filteredPlayerData.filter(village => village.wood > 0 && village.clay > 0 && village.iron > 0 && village.availableMerchants > 0);
+        
+            // Initialize remaining resources for each target village
+            const targetVillageResources = {};
+            targetVillages.forEach(targetVillage => {
+                targetVillageResources[targetVillage] = {
+                    wood: maxWood,
+                    clay: maxClay,
+                    iron: maxIron
+                };
+            });
+        
+            // Step 3: Calculate possible origin to target village pairs based on arrival times
+            const currentTime = Date.now();
+            const originTargetPairs = {};
+        
+            validVillages.forEach(originVillage => {
+                const possibleTargets = targetVillages.map(targetVillage => {
+                    const travelTime = calculateTravelTime(originVillage.coord, targetVillage, merchantBonus);
+                    const arrivalTime = currentTime + travelTime;
+                    const withinArrivalTime = arrivalTimes.some(([start, end]) => arrivalTime >= start && arrivalTime <= end);
+                    return withinArrivalTime ? { coord: targetVillage, travelTime } : null;
+                }).filter(Boolean);
+        
+                if (possibleTargets.length > 0) {
+                    originTargetPairs[originVillage.coord] = possibleTargets.sort((a, b) => a.travelTime - b.travelTime);
+                }
+            });
+        
+            // Step 4: Fill the final transport data array
+            const transportData = [];
+        
+            while (Object.keys(originTargetPairs).length > 0) {
+                const originCoord = Object.keys(originTargetPairs)[0];
+                const originVillage = validVillages.find(village => village.coord === originCoord);
+                const targetVillage = originTargetPairs[originCoord][0]; // Select the target village with the lowest travel time
+        
+                const totalMerchantCapacity = originVillage.availableMerchants * merchantCapacity;
+        
+                // Calculate the maximum amount of each resource that can be carried by the merchants
+                let maxWoodTransport = totalMerchantCapacity * woodRatio;
+                let maxclayTransport = totalMerchantCapacity * clayRatio;
+                let maxIronTransport = totalMerchantCapacity * ironRatio;
+        
+                // Adjust the amounts based on the available resources
+                let adjustmentFactor = 1;
+                if (maxWoodTransport > originVillage.wood) {
+                    adjustmentFactor = originVillage.wood / maxWoodTransport;
+                    maxWoodTransport *= adjustmentFactor;
+                    maxclayTransport *= adjustmentFactor;
+                    maxIronTransport *= adjustmentFactor;
+                }
+                if (maxclayTransport > originVillage.clay) {
+                    adjustmentFactor = originVillage.clay / maxclayTransport;
+                    maxWoodTransport *= adjustmentFactor;
+                    maxclayTransport *= adjustmentFactor;
+                    maxIronTransport *= adjustmentFactor;
+                }
+                if (maxIronTransport > originVillage.iron) {
+                    adjustmentFactor = originVillage.iron / maxIronTransport;
+                    maxWoodTransport *= adjustmentFactor;
+                    maxclayTransport *= adjustmentFactor;
+                    maxIronTransport *= adjustmentFactor;
+                }
+        
+                const resourcesToSend = {
+                    wood: Math.floor(Math.min(maxWoodTransport, targetVillageResources[targetVillage.coord].wood)),
+                    clay: Math.floor(Math.min(maxclayTransport, targetVillageResources[targetVillage.coord].clay)),
+                    iron: Math.floor(Math.min(maxIronTransport, targetVillageResources[targetVillage.coord].iron))
+                };
+        
+                if (resourcesToSend.wood > 0 || resourcesToSend.clay > 0 || resourcesToSend.iron > 0) {
+                    transportData.push({
+                        origin: originVillage.coord,
+                        target: targetVillage.coord,
+                        wood: resourcesToSend.wood,
+                        clay: resourcesToSend.clay,
+                        iron: resourcesToSend.iron,
+                        url: originVillage.url,
+                        name: originVillage.name,
+                        id: originVillage.id,
+                        travelTime: originTargetPairs[originCoord][0].travelTime
+                    });
+        
+                    // Update remaining resources for the target village
+                    targetVillageResources[targetVillage.coord].wood -= resourcesToSend.wood;
+                    targetVillageResources[targetVillage.coord].clay -= resourcesToSend.clay;
+                    targetVillageResources[targetVillage.coord].iron -= resourcesToSend.iron;
+        
+                    // Remove target village from all origin villages if it has no more resources remaining
+                    if (
+                        targetVillageResources[targetVillage.coord].wood <= 0 ||
+                        targetVillageResources[targetVillage.coord].clay <= 0 ||
+                        targetVillageResources[targetVillage.coord].iron <= 0
+                    ) {
+                        Object.keys(originTargetPairs).forEach(originCoord => {
+                            originTargetPairs[originCoord] = originTargetPairs[originCoord].filter(
+                                target => target.coord !== targetVillage.coord
+                            );
+                        });
+                    }
+                }
+        
+                // Remove origin village after assigning it a transport
+                delete originTargetPairs[originCoord];
+            }
+        
+            if (DEBUG) console.debug(`${scriptInfo}: Transport Data:`, transportData);
+        
+            return transportData;
         }
 
         // Function to calculate sending resources as a mint ratio
         function calculateMintRatioResources(originVillages, targetVillages) {
+            // Accurate mint ratios -- Inspired by shinko to kuma
+            const woodPercentage = 28000 / 83000;
+            const clayPercentage = 30000 / 83000;
+            const ironPercentage = 25000 / 83000;
+        
+            const localStorageObject = getLocalStorage();
+            const merchantBonus = parseBool(localStorageObject.sbMerchantBonus);
+            const holdBackMerchants = Number(localStorageObject.sbHoldBackMerchants);
+            const holdBackResourcesAbsolute = parseBool(localStorageObject.sbHoldBackResourcesAbsoluteRadio);
+            const holdBackResourcesPercentage = parseBool(localStorageObject.sbHoldBackResourcesPercentageRadio);
+            const holdBackWood = Number(localStorageObject.sbHoldBackWood);
+            const holdBackClay = Number(localStorageObject.sbHoldBackClay);
+            const holdBackIron = Number(localStorageObject.sbHoldBackIron);
+            const holdBackPercentage = Number(localStorageObject.sbHoldBackPercentage);
+            const maxWood = Number(localStorageObject.sbMaxWood);
+            const maxClay = Number(localStorageObject.sbMaxClay);
+            const maxIron = Number(localStorageObject.sbMaxIron);
+            const arrivalTimes = getLocalStorage().sbArrivalTimes;
+        
+            const merchantCapacity = merchantBonus ? 1500 : 1000;
+        
+            // Step 1: Create a copy of the player data object and adjust for hold back merchants and resources
+            const playerDataCopy = JSON.parse(JSON.stringify(playerData));
+            playerDataCopy.forEach(village => {
+                village.availableMerchants = Math.max(0, village.availableMerchants - holdBackMerchants);
+                if (holdBackResourcesAbsolute) {
+                    village.wood = Math.max(0, village.wood - holdBackWood);
+                    village.clay = Math.max(0, village.clay - holdBackClay);
+                    village.iron = Math.max(0, village.iron - holdBackIron);
+                } else if (holdBackResourcesPercentage) {
+                    const holdBackAmount = village.warehouseCapacity * (holdBackPercentage / 100);
+                    village.wood = Math.max(0, village.wood - holdBackAmount);
+                    village.clay = Math.max(0, village.clay - holdBackAmount);
+                    village.iron = Math.max(0, village.iron - holdBackAmount);
+                }
+            });
+        
+            // Remove entries where the coordinate is not in originVillages
+            const filteredPlayerData = playerDataCopy.filter(village => originVillages.includes(village.coord));
+        
+            // Step 2: Remove villages with 0 resources or 0 available merchants
+            const validVillages = filteredPlayerData.filter(village => village.wood > 0 && village.clay > 0 && village.iron > 0 && village.availableMerchants > 0);
+        
+            // Initialize remaining resources for each target village
+            const targetVillageResources = {};
+            targetVillages.forEach(targetVillage => {
+                targetVillageResources[targetVillage] = {
+                    wood: maxWood,
+                    clay: maxClay,
+                    iron: maxIron
+                };
+            });
+        
+            // Step 3: Calculate possible origin to target village pairs based on arrival times
+            const currentTime = Date.now();
+            const originTargetPairs = {};
+        
+            validVillages.forEach(originVillage => {
+                const possibleTargets = targetVillages.map(targetVillage => {
+                    const travelTime = calculateTravelTime(originVillage.coord, targetVillage, merchantBonus);
+                    const arrivalTime = currentTime + travelTime;
+                    const withinArrivalTime = arrivalTimes.some(([start, end]) => arrivalTime >= start && arrivalTime <= end);
+                    return withinArrivalTime ? { coord: targetVillage, travelTime } : null;
+                }).filter(Boolean);
+        
+                if (possibleTargets.length > 0) {
+                    originTargetPairs[originVillage.coord] = possibleTargets.sort((a, b) => a.travelTime - b.travelTime);
+                }
+            });
+        
+            // Step 4: Fill the final transport data array
+            const transportData = [];
+        
+            while (Object.keys(originTargetPairs).length > 0) {
+                const originCoord = Object.keys(originTargetPairs)[0];
+                const originVillage = validVillages.find(village => village.coord === originCoord);
+                const targetVillage = originTargetPairs[originCoord][0]; // Select the target village with the lowest travel time
+        
+                const totalMerchantCapacity = originVillage.availableMerchants * merchantCapacity;
+        
+                // Calculate the maximum amount of each resource that can be carried by the merchants
+                let maxWoodTransport = totalMerchantCapacity * woodPercentage;
+                let maxClayTransport = totalMerchantCapacity * clayPercentage;
+                let maxIronTransport = totalMerchantCapacity * ironPercentage;
+        
+                // Adjust the amounts based on the available resources -- inspired by shinko to kuma
+                let adjustmentFactor = 1;
+                if (maxWoodTransport > originVillage.wood) {
+                    adjustmentFactor = originVillage.wood / maxWoodTransport;
+                    maxWoodTransport *= adjustmentFactor;
+                    maxClayTransport *= adjustmentFactor;
+                    maxIronTransport *= adjustmentFactor;
+                }
+                if (maxClayTransport > originVillage.clay) {
+                    adjustmentFactor = originVillage.clay / maxClayTransport;
+                    maxWoodTransport *= adjustmentFactor;
+                    maxClayTransport *= adjustmentFactor;
+                    maxIronTransport *= adjustmentFactor;
+                }
+                if (maxIronTransport > originVillage.iron) {
+                    adjustmentFactor = originVillage.iron / maxIronTransport;
+                    maxWoodTransport *= adjustmentFactor;
+                    maxClayTransport *= adjustmentFactor;
+                    maxIronTransport *= adjustmentFactor;
+                }
+        
+                const resourcesToSend = {
+                    wood: Math.floor(Math.min(maxWoodTransport, targetVillageResources[targetVillage.coord].wood)),
+                    clay: Math.floor(Math.min(maxClayTransport, targetVillageResources[targetVillage.coord].clay)),
+                    iron: Math.floor(Math.min(maxIronTransport, targetVillageResources[targetVillage.coord].iron))
+                };
+        
+                if (resourcesToSend.wood > 0 || resourcesToSend.clay > 0 || resourcesToSend.iron > 0) {
+                    transportData.push({
+                        origin: originVillage.coord,
+                        target: targetVillage.coord,
+                        wood: resourcesToSend.wood,
+                        clay: resourcesToSend.clay,
+                        iron: resourcesToSend.iron,
+                        url: originVillage.url,
+                        name: originVillage.name,
+                        id: originVillage.id,
+                        travelTime: originTargetPairs[originCoord][0].travelTime
+                    });
+        
+                    // Update remaining resources for the target village
+                    targetVillageResources[targetVillage.coord].wood -= resourcesToSend.wood;
+                    targetVillageResources[targetVillage.coord].clay -= resourcesToSend.clay;
+                    targetVillageResources[targetVillage.coord].iron -= resourcesToSend.iron;
+        
+                    // Remove target village from all origin villages if it has no more resources remaining
+                    if (
+                        targetVillageResources[targetVillage.coord].wood <= 0 ||
+                        targetVillageResources[targetVillage.coord].clay <= 0 ||
+                        targetVillageResources[targetVillage.coord].iron <= 0
+                    ) {
+                        Object.keys(originTargetPairs).forEach(originCoord => {
+                            originTargetPairs[originCoord] = originTargetPairs[originCoord].filter(
+                                target => target.coord !== targetVillage.coord
+                            );
+                        });
+                    }
+                }
+        
+                // Remove origin village after assigning it a transport
+                delete originTargetPairs[originCoord];
+            }
+        
+            if (DEBUG) console.debug(`${scriptInfo}: Transport Data:`, transportData);
+        
+            return transportData;
         }
 
         // Function to calculate sending resources to fill the warehouse
         function calculateFillResources(originVillages, targetVillages) {
+            const localStorageObject = getLocalStorage();
+            const merchantBonus = parseBool(localStorageObject.sbMerchantBonus);
+            const holdBackMerchants = Number(localStorageObject.sbHoldBackMerchants);
+            const holdBackResourcesAbsolute = parseBool(localStorageObject.sbHoldBackResourcesAbsoluteRadio);
+            const holdBackResourcesPercentage = parseBool(localStorageObject.sbHoldBackResourcesPercentageRadio);
+            const holdBackWood = Number(localStorageObject.sbHoldBackWood);
+            const holdBackClay = Number(localStorageObject.sbHoldBackClay);
+            const holdBackIron = Number(localStorageObject.sbHoldBackIron);
+            const maxWood = Number(localStorageObject.sbMaxWood);
+            const maxClay = Number(localStorageObject.sbMaxClay);
+            const maxIron = Number(localStorageObject.sbMaxIron);
+            const holdBackPercentage = Number(localStorageObject.sbHoldBackPercentage);
+            const sendGapToMax = Number(localStorageObject.sbSendGapToMax) / 100;
+            const arrivalTimes = getLocalStorage().sbArrivalTimes;
+        
+            const merchantCapacity = merchantBonus ? 1500 : 1000;
+        
+            // Step 1: Create a copy of the player data object and adjust for hold back merchants and resources
+            const playerDataCopy = JSON.parse(JSON.stringify(playerData));
+            playerDataCopy.forEach(village => {
+                village.availableMerchants = Math.max(0, village.availableMerchants - holdBackMerchants);
+                if (holdBackResourcesAbsolute) {
+                    village.wood = Math.max(0, village.wood - holdBackWood);
+                    village.clay = Math.max(0, village.clay - holdBackClay);
+                    village.iron = Math.max(0, village.iron - holdBackIron);
+                } else if (holdBackResourcesPercentage) {
+                    const holdBackAmount = village.warehouseCapacity * (holdBackPercentage / 100);
+                    village.wood = Math.max(0, village.wood - holdBackAmount);
+                    village.clay = Math.max(0, village.clay - holdBackAmount);
+                    village.iron = Math.max(0, village.iron - holdBackAmount);
+                }
+            });
+        
+            // Remove entries where the coordinate is not in originVillages
+            const filteredPlayerData = playerDataCopy.filter(village => originVillages.includes(village.coord));
+        
+            // Initialize remaining resources for each target village based on warehouseData
+            const targetVillageResources = {};
+            targetVillages.forEach(targetVillage => {
+                const warehouse = warehouseData[targetVillage];
+                const maxStorage = warehouse.maxStorage * (1 - sendGapToMax);
+                targetVillageResources[targetVillage] = {
+                    wood: Math.min(maxWood, Math.max(0, maxStorage - warehouse.wood)),
+                    clay: Math.min(maxClay, Math.max(0, maxStorage - warehouse.clay)),
+                    iron: Math.min(maxIron, Math.max(0, maxStorage - warehouse.iron))
+                };
+            });
+        
+            // Step 2: Calculate possible origin to target village pairs based on arrival times
+            const currentTime = Date.now();
+            const originTargetPairs = {};
+        
+            targetVillages.forEach(targetVillage => {
+                const possibleOrigins = filteredPlayerData.map(originVillage => {
+                    const travelTime = calculateTravelTime(originVillage.coord, targetVillage, merchantBonus);
+                    const arrivalTime = currentTime + travelTime;
+                    const withinArrivalTime = arrivalTimes.some(([start, end]) => arrivalTime >= start && arrivalTime <= end);
+                    return withinArrivalTime ? { coord: originVillage.coord, travelTime } : null;
+                }).filter(Boolean);
+        
+                if (possibleOrigins.length > 0) {
+                    originTargetPairs[targetVillage] = possibleOrigins.sort((a, b) => a.travelTime - b.travelTime);
+                }
+            });
+        
+            // Step 3: Fill the final transport data array
+            const transportData = [];
+            
+            Object.keys(targetVillageResources).forEach(targetCoord => {
+                const targetVillage = targetVillageResources[targetCoord];
+            
+                while (targetVillage.wood > 0 || targetVillage.clay > 0 || targetVillage.iron > 0) {
+                    if (!originTargetPairs[targetCoord] || originTargetPairs[targetCoord].length === 0) {
+                        break;
+                    }
+            
+                    const originCoord = originTargetPairs[targetCoord][0].coord;
+                    const originVillage = filteredPlayerData.find(village => village.coord === originCoord);
+                    const travelTime = originTargetPairs[targetCoord][0].travelTime;
+            
+                    let totalMerchantCapacity = originVillage.availableMerchants * merchantCapacity;
+            
+                    let woodToSend = Math.min(totalMerchantCapacity, targetVillage.wood, originVillage.wood);
+                    totalMerchantCapacity -= Math.ceil(woodToSend / 1500) * 1500;
+            
+                    let clayToSend = Math.min(totalMerchantCapacity, targetVillage.clay, originVillage.clay);
+                    totalMerchantCapacity -= Math.ceil(clayToSend / 1500) * 1500;
+            
+                    let ironToSend = Math.min(totalMerchantCapacity, targetVillage.iron, originVillage.iron);
+                    totalMerchantCapacity -= Math.ceil(ironToSend / 1500) * 1500;
+            
+                    const resourcesToSend = {
+                        wood: woodToSend,
+                        clay: clayToSend,
+                        iron: ironToSend
+                    };
+            
+                    if (resourcesToSend.wood > 0 || resourcesToSend.clay > 0 || resourcesToSend.iron > 0) {
+                        transportData.push({
+                            origin: originVillage.coord,
+                            target: targetCoord,
+                            wood: resourcesToSend.wood,
+                            clay: resourcesToSend.clay,
+                            iron: resourcesToSend.iron,
+                            url: originVillage.url,
+                            name: originVillage.name,
+                            id: originVillage.id,
+                            travelTime: travelTime
+                        });
+            
+                        // Update remaining resources for the target village
+                        targetVillage.wood -= resourcesToSend.wood;
+                        targetVillage.clay -= resourcesToSend.clay;
+                        targetVillage.iron -= resourcesToSend.iron;
+            
+                        // Update remaining resources for the origin village
+                        originVillage.wood -= resourcesToSend.wood;
+                        originVillage.clay -= resourcesToSend.clay;
+                        originVillage.iron -= resourcesToSend.iron;
+            
+                        // Update remaining merchants for the origin village
+                        originVillage.availableMerchants -= Math.ceil(resourcesToSend.wood / merchantCapacity) +
+                                                             Math.ceil(resourcesToSend.clay / merchantCapacity) +
+                                                             Math.ceil(resourcesToSend.iron / merchantCapacity);
+            
+                        // Remove origin village from consideration if it has no more resources or merchants available
+                        if (originVillage.wood <= 0 || originVillage.clay <= 0 || originVillage.iron <= 0 || originVillage.availableMerchants <= 0) {
+                            originTargetPairs[targetCoord] = originTargetPairs[targetCoord].filter(origin => origin.coord !== originCoord);
+                        }
+                    }
+                }
+            });
+        
+            if (DEBUG) console.debug(`${scriptInfo}: Transport Data:`, transportData);
+        
+            return transportData;
+        }
+
+        function calculateTravelTime(origin, target, merchantBonus) {
+            const distance = twSDK.calculateDistance(origin, target);
+        
+            // Access the world configuration
+            const { speed } = worldConfig.config;
+        
+            // Determine the merchant speed based on the bonus
+            const merchantTravelSpeed = merchantBonus ? merchantSpeedWithBonus : merchantSpeed;
+        
+            // Calculate the travel time in milliseconds
+            return Math.round((distance * merchantTravelSpeed * 60 * 1000) / speed);
         }
 
 
@@ -1377,8 +1965,8 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                     ? $(pageContent).find(".res.mwood,.warn_90.mwood,.warn.mwood")
                     : $(pageContent).find(".res.wood,.warn_90.wood,.warn.wood");
                 const clayElements = isMobile 
-                    ? $(pageContent).find(".res.mstone,.warn_90.mstone,.warn.mstone")
-                    : $(pageContent).find(".res.stone,.warn_90.stone,.warn.stone");
+                    ? $(pageContent).find(".res.mclay,.warn_90.mclay,.warn.mclay")
+                    : $(pageContent).find(".res.clay,.warn_90.clay,.warn.clay");
                 const ironElements = isMobile 
                     ? $(pageContent).find(".res.miron,.warn_90.miron,.warn.miron")
                     : $(pageContent).find(".res.iron,.warn_90.iron,.warn.iron");
@@ -1431,7 +2019,7 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                             "coord": coord,
                             "name": $(this).text().trim(),
                             "wood": woodTotals[index],
-                            "stone": clayTotals[index],
+                            "clay": clayTotals[index],
                             "iron": ironTotals[index],
                             "availableMerchants": availableMerchants[index],
                             "totalMerchants": totalMerchants[index],
@@ -1798,9 +2386,8 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         async function fetchWorldConfigData() {
             try {
                 const villages = await twSDK.worldDataAPI('village');
-                const players = await twSDK.worldDataAPI('player');
-                const tribes = await twSDK.worldDataAPI('ally');
-                return { tribes, players, villages };
+                const worldConfig = await twSDK.getWorldConfig();
+                return { villages, worldConfig };
             } catch (error) {
                 UI.ErrorMessage(
                     twSDK.tt('There was an error while fetching the data!')
