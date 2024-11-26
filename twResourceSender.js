@@ -79,7 +79,12 @@ var allIdsRS = [
     'sbMaxClay',
     'sbMaxIron'
 ];
+// GLOBAL VARIABLES
 var warehouseData =  {};
+var totalWoodSent = 0;
+var totalClaySent = 0;
+var totalIronSent = 0;
+
 var scriptConfig = {
     scriptData: {
         prefix: 'sbRS',
@@ -1008,6 +1013,9 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
 
         async function calculate() {
             if (DEBUG) console.debug(`${scriptInfo}: Calculating...`);
+            totalWoodSent = 0;
+            totalClaySent = 0;
+            totalIronSent = 0;
         
             // Get the input from localstorage
             const localStorageObject = getLocalStorage();
@@ -1045,17 +1053,15 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         }
 
         // Function to create and append a table that contains each transport in a row with a button to send
-        // At the top the already sent resources are listed (updated when a transport is sent per button)
-        // By default, the transports are sorted by ascending travel time and the topmost button is always focused to be clicked with enter
-        // After the topmost button is clicked, the entry is removed from the table and the table is updated with the topmost entry button focused
-        // The table will be inside a div with the id sbTransportTable
-        // The table should be structured like this:
-        // Origin | Target | Travel Time | Resources (Wood | Clay | Iron) | Send Button
+        // Inspired by shinko to kuma
         function createTransportTable(transportData) {
             // Remove existing table if it exists
             if ($("#sbTransportTable")[0]) {
                 $("#sbTransportTable")[0].remove();
             }
+        
+            // Sort the transports by ascending travel time
+            transportData.sort((a, b) => a.travelTime - b.travelTime);
         
             // Create the table structure
             let htmlString = `
@@ -1080,7 +1086,7 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                                 <th colspan="2"></th>
                             </tr>
                             <tr>
-                                <th${twSDK.tt('Origin')}</th>
+                                <th>${twSDK.tt('Origin')}</th>
                                 <th>${twSDK.tt('Target')}</th>
                                 <th>${twSDK.tt('Travel Time')}</th>
                                 <th>${twSDK.tt('Wood')}</th>
@@ -1106,11 +1112,15 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                 // Get the target village id from the coordinates
                 const targetVillageId = villageData[transport.targetCoord];
                 let rowClass = index % 2 === 0 ? "evenRow" : "oddRow";
+        
+                // Convert travel time from ms to hh:mm:ss format
+                let travelTime = msToTime(transport.travelTime);
+        
                 let rowHtml = `
                     <tr class="${rowClass}">
                         <td><a href="${transport.url}" style="color:#40D0E0;">${transport.name}</a></td>
                         <td>${transport.target}</td>
-                        <td>${transport.travelTime}</td>
+                        <td>${travelTime}</td>
                         <td>${transport.wood}<span class="icon header wood"></span></td>
                         <td>${transport.clay}<span class="icon header clay"></span></td>
                         <td>${transport.iron}<span class="icon header iron"></span></td>
@@ -1127,8 +1137,7 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         }
         
         // Function to send a resource transport
-        // The function should be called when the send button is clicked
-        // The function should take the origin village id, target village coordinates, and resources as parameters
+        // Inspired by shinko to kuma
         function sendResource(originVillageId, targetVillageId, wood, clay, iron, index) {
             // Disable all send buttons to prevent multiple sends at the same time
             $(':button[id^="sendResources"]').prop('disabled', true);
@@ -1190,6 +1199,19 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         // Function to format numbers with commas for easier readability
         function convertToNumberWithDots(number) {
             return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        }
+
+        // Function to convert milliseconds to hh:mm:ss format
+        function msToTime(duration) {
+            let seconds = Math.floor((duration / 1000) % 60);
+            let minutes = Math.floor((duration / (1000 * 60)) % 60);
+            let hours = Math.floor((duration / (1000 * 60 * 60)) % 24);
+        
+            hours = (hours < 10) ? "0" + hours : hours;
+            minutes = (minutes < 10) ? "0" + minutes : minutes;
+            seconds = (seconds < 10) ? "0" + seconds : seconds;
+        
+            return hours + ":" + minutes + ":" + seconds;
         }
 
         // Function to calculate sending absolute resources
