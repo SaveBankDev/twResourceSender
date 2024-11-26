@@ -28,6 +28,7 @@ defaultSettings = {
     'sbSendResourcesAbsoluteRadio': true,
     'sbSendResourcesRatioRadio': false,
     'sbSendResourcesMintRatioRadio': false,
+    'sbSendResourcesFillRadio': false,
     'sbSendWood': 0,
     'sbSendClay': 0,
     'sbSendIron': 0,
@@ -134,6 +135,13 @@ var scriptConfig = {
             'Gap to max (%)': 'Gap to max (%)',
             'Calculate & Send': 'Calculate & Send',
             'Calculate': 'Calculate',
+            'Please enter origin villages.': 'Please enter origin villages.',
+            'Please enter target villages.': 'Please enter target villages.',
+            'The sum of the ratios must be 100.': 'The sum of the ratios must be 100.',
+            'Please select how to send resources.': 'Please select how to send resources.',
+            'Multiple send resource options selected. Please reload andreselect how to send resources.': 'Multiple send resource options selected. Please reload andreselect how to send resources.',
+            'Please paste warehouse data before selecting fill.': 'Please paste warehouse data before selecting fill.',
+            'There was an error while fetching the data!' : 'There was an error while fetching the data!',
         },
         de_DE: {
             'Redirecting...': 'Weiterleiten...',
@@ -182,6 +190,13 @@ var scriptConfig = {
             'Gap to max (%)': 'Abstand zum Maximum (%)',
             'Calculate & Send': 'Berechnen & Senden',
             'Calculate': 'Berechnen',
+            'Please enter origin villages.': 'Bitte geben Sie Herkunftsdörfer ein.',
+            'Please enter target villages.': 'Bitte geben Sie Zieldörfer ein.',
+            'The sum of the ratios must be 100.': 'Die Summe der Verhältnisse muss 100 sein.',
+            'Please select how to send resources.': 'Bitte wählen Sie, wie die Ressourcen gesendet werden sollen.',
+            'Multiple send resource options selected. Please reload andreselect how to send resources.': 'Mehrere Optionen zum Senden von Ressourcen ausgewählt. Bitte neu laden und auswählen, wie die Ressourcen gesendet werden sollen.',
+            'Please paste warehouse data before selecting fill.': 'Bitte fügen Sie die Speicherdaten ein, bevor Sie Auffüllen auswählen.',
+            'There was an error while fetching the data!' : 'Es ist ein Fehler beim Abrufen der Daten aufgetreten!',
         }
     },
     allowedMarkets: [],
@@ -212,9 +227,9 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         */
         const groups = await fetchVillageGroups();
         const { tribes, players, villages } = await fetchWorldConfigData();
-        const allCoords = villages.map(village => [village[2], village[3]]);
-        const allVillages = new Map(villages.map(village => [`${village[2]}|${village[3]}`, [village[0], village[4], village[5]]]));
-        const allPlayers = new Map(players.map(player => [player[0], player.slice(1)]));
+        const villageIdToCoordMap = createVillageMap(villages);
+        const playerData = await getPlayerData();
+        if(DEBUG) console.debug(`${scriptInfo}: Player data:`, playerData);
         const endTime = performance.now();
         if (DEBUG) console.debug(`${scriptInfo}: Startup time: ${(endTime - startTime).toFixed(2)} milliseconds`);
         if (DEBUG) console.debug(`${scriptInfo}: `, tribes);
@@ -561,6 +576,7 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                         // Select fill radio button
                         $('#sbSendResourcesFillRadio').prop('checked', true);
                         $('#sbSendResourcesFill').show();
+                        localStorageObject.sbSendResourcesFillRadio = true;
 
                         // Uncheck and hide all other buttons and update their states in the local storage
                         $('#sbSendResourcesAbsoluteRadio').prop('checked', false);
@@ -676,7 +692,10 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                 resetInputFields();
             });
 
-            $('#sbResCalculate').on('click', calculate);
+            $('#sbResCalculate').on('click', async function (e){
+                e.preventDefault();
+                await calculate();
+            });
 
             $(document).ready(function () {
                 allIdsRS.forEach(function (id) {
@@ -971,8 +990,114 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         }
 
 
-        function calculate() {
-            if(DEBUG) console.debug(`${scriptInfo}: Calculating...`);
+        async function calculate() {
+            if (DEBUG) console.debug(`${scriptInfo}: Calculating...`);
+        
+            // Get the input from localstorage
+            const localStorageObject = getLocalStorage();
+            if (DEBUG) console.debug(`${scriptInfo}: Local Storage Object:`, localStorageObject);
+        
+            // Verify inputs
+            if (!verifyInputs(localStorageObject)) {
+                return;
+            }
+        
+            // Get origin and target villages
+            const originVillages = localStorageObject.sbOriginCustomSelection ? localStorageObject.sbCustomOriginVillages.split(' ') : await getPlayerData();
+            const targetVillages = localStorageObject.sbTargetCustomSelection ? localStorageObject.sbCustomTargetVillages.split(' ') : await getPlayerData();
+        
+            // Determine which calculation function to call based on the selected radio button
+            if (localStorageObject.sbSendResourcesAbsoluteRadio) {
+                calculateAbsoluteResources(originVillages, targetVillages);
+            } else if (localStorageObject.sbSendResourcesRatioRadio) {
+                calculateRatioResources(originVillages, targetVillages);
+            } else if (localStorageObject.sbSendResourcesMintRatioRadio) {
+                calculateMintRatioResources(originVillages, targetVillages);
+            } else if (localStorageObject.sbSendResourcesFillRadio) {
+                calculateFillResources(originVillages, targetVillages);
+            }
+        }
+
+        // Function to calculate sending absolute resources
+        function calculateAbsoluteResources(originVillages, targetVillages) {
+        }
+
+        // Function to calculate sending resources as a ratio
+        function calculateRatioResources(originVillages, targetVillages) {
+        }
+
+        // Function to calculate sending resources as a mint ratio
+        function calculateMintRatioResources(originVillages, targetVillages) {
+        }
+
+        // Function to calculate sending resources to fill the warehouse
+        function calculateFillResources(originVillages, targetVillages) {
+        }
+
+
+        function verifyInputs(localStorageObject) {  
+            // Verify origin and target villages
+            const originVillagesCustomSelection = parseBool(localStorageObject.sbOriginCustomSelection);
+            const targetVillagesCustomSelection = parseBool(localStorageObject.sbTargetCustomSelection);
+
+            const customOriginVillages = localStorageObject.sbCustomOriginVillages;
+            const customTargetVillages = localStorageObject.sbCustomTargetVillages;
+
+            if (originVillagesCustomSelection && !customOriginVillages) {
+                if(DEBUG) console.debug(`${scriptInfo}: Custom Origin Villages: ${customOriginVillages} and Origin Villages Custom Selection: ${originVillagesCustomSelection}`);
+                UI.ErrorMessage(`${twSDK.tt('Please enter origin villages.')}`);
+                return false;
+            }
+
+            if (targetVillagesCustomSelection && !customTargetVillages) {
+                if(DEBUG) console.debug(`${scriptInfo}: Custom Target Villages: ${customTargetVillages} and Target Villages Custom Selection: ${targetVillagesCustomSelection}`);
+                UI.ErrorMessage(`${twSDK.tt('Please enter target villages.')}`);
+                return false;
+            }
+
+            // Verify ratio and radio buttons
+            const sendResourcesAbsolute = parseBool(localStorageObject.sbSendResourcesAbsoluteRadio);
+            const sendResourcesRatio = parseBool(localStorageObject.sbSendResourcesRatioRadio);
+            const sendResourcesMintRatio = parseBool(localStorageObject.sbSendResourcesMintRatioRadio);
+            const sendResourcesFill = parseBool(localStorageObject.sbSendResourcesFillRadio);
+            
+            const radioButtons = [sendResourcesAbsolute, sendResourcesRatio, sendResourcesMintRatio, sendResourcesFill];
+            const selectedRadioButtons = radioButtons.filter(Boolean);
+            
+            if (selectedRadioButtons.length > 1) {
+                // More than one radio button is set to true
+                localStorageObject.sbSendResourcesAbsoluteRadio = true;
+                localStorageObject.sbSendResourcesRatioRadio = false;
+                localStorageObject.sbSendResourcesMintRatioRadio = false;
+                localStorageObject.sbSendResourcesFillRadio = false;
+                saveLocalStorage(localStorageObject);
+                UI.ErrorMessage(`${twSDK.tt('Multiple send resource options selected. Please reload andreselect how to send resources.')}`);
+                return false;
+            }
+            
+            if (!sendResourcesAbsolute && !sendResourcesRatio && !sendResourcesMintRatio && !sendResourcesFill) {
+                UI.ErrorMessage(`${twSDK.tt('Please select how to send resources.')}`);
+                return false;
+            }
+            
+            const sendWoodRatio = Number(localStorageObject.sbSendWoodRatio);
+            const sendClayRatio = Number(localStorageObject.sbSendClayRatio);
+            const sendIronRatio = Number(localStorageObject.sbSendIronRatio);
+            
+            if (sendResourcesRatio && (sendWoodRatio + sendClayRatio + sendIronRatio !== 100)) {
+                UI.ErrorMessage(`${twSDK.tt('The sum of the ratios must be 100.')}`);
+                return false;
+            }
+
+            // Check warehouse data if fill is selected
+            if (sendResourcesFill) {
+                if (Object.keys(warehouseData).length === 0) {
+                    UI.ErrorMessage(`${twSDK.tt('Please paste warehouse data before selecting fill.')}`);
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         // Helper: Render groups select
@@ -1197,8 +1322,154 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                 }).fail(() => { if (DEBUG) console.debug("Failed to fetch total script runs"); });
             } catch (error) { if (DEBUG) console.debug("Error fetching total script runs: ", error); }
         }
+
+        // Get villages from group id
+        async function getVillagesByGroupId(groupId) {
+            const url = game_data.link_base_pure + `overview_villages&mode=combined&group=${groupId}&page=-1`;
         
+            try {
+                const response = await fetch(url);
+                const pageContent = await response.text();
+        
+                const villageCoordinates = [];
+                const isMobile = $("#mobileHeader").length > 0;
+        
+                const villageElements = isMobile 
+                    ? $(pageContent).find("#combined_table tr.nowrap .quickedit-vn")
+                    : $(pageContent).find("#combined_table tr.nowrap .quickedit-vn");
+        
+                villageElements.each(function() {
+                    const villageId = parseInt($(this).attr('data-id'));
+                    const coord = villageIdToCoordMap.get(villageId);
+                    if (coord) {
+                        villageCoordinates.push(coord);
+                    }
+                });
+        
+                return villageCoordinates;
+            } catch (error) {
+                UI.ErrorMessage(twSDK.tt('There was an error while fetching the data!'));
+                console.error("Error fetching village data:", error);
+                return [];
+            }
+        }
+
+        async function getPlayerData() {
+            const url = game_data.player.sitter > 0 
+                ? `game.php?t=${game_data.player.id}&screen=overview_villages&mode=prod&page=-1`
+                : "game.php?&screen=overview_villages&mode=prod&page=-1";
+        
+            try {
+                const response = await fetch(url);
+                const pageContent = await response.text();
+        
+                const villagesData = [];
+                const woodTotals = [];
+                const clayTotals = [];
+                const ironTotals = [];
+                const warehouseCapacities = [];
+                const availableMerchants = [];
+                const totalMerchants = [];
+        
+                const isMobile = $("#mobileHeader")[0];
+        
+                const woodElements = isMobile 
+                    ? $(pageContent).find(".res.mwood,.warn_90.mwood,.warn.mwood")
+                    : $(pageContent).find(".res.wood,.warn_90.wood,.warn.wood");
+                const clayElements = isMobile 
+                    ? $(pageContent).find(".res.mstone,.warn_90.mstone,.warn.mstone")
+                    : $(pageContent).find(".res.stone,.warn_90.stone,.warn.stone");
+                const ironElements = isMobile 
+                    ? $(pageContent).find(".res.miron,.warn_90.miron,.warn.miron")
+                    : $(pageContent).find(".res.iron,.warn_90.iron,.warn.iron");
+                const villageElements = $(pageContent).find(".quickedit-vn");
+                const warehouseElements = isMobile 
+                    ? $(pageContent).find(".mheader.ressources")
+                    : $(pageContent).find(".res.iron,.warn_90.iron,.warn.iron").parent().next();
+                const merchantElements = isMobile 
+                    ? $(pageContent).find('a[href*="market"]')
+                    : $(pageContent).find(".res.iron,.warn_90.iron,.warn.iron").parent().next().next();
+        
+                // Getting wood amounts
+                woodElements.each(function() {
+                    let woodAmount = $(this).text().replace(/\./g, '').replace(',', '');
+                    woodTotals.push(woodAmount);
+                });
+        
+                // Getting clay amounts
+                clayElements.each(function() {
+                    let clayAmount = $(this).text().replace(/\./g, '').replace(',', '');
+                    clayTotals.push(clayAmount);
+                });
+        
+                // Getting iron amounts
+                ironElements.each(function() {
+                    let ironAmount = $(this).text().replace(/\./g, '').replace(',', '');
+                    ironTotals.push(ironAmount);
+                });
+        
+                // Getting warehouse capacities
+                warehouseElements.each(function() {
+                    warehouseCapacities.push($(this).text());
+                });
+        
+                // Getting available merchants and total merchants
+                merchantElements.each(function() {
+                    const merchants = $(this).text().match(/(\d*)\/(\d*)/);
+                    availableMerchants.push(merchants ? merchants[1] : "0");
+                    totalMerchants.push(merchants ? merchants[2] : "999");
+                });
+        
+                // Combining into one array of objects
+                villageElements.each(function(index) {
+                    const villageId = parseInt($(this).attr('data-id'));
+                    const coord = villageIdToCoordMap.get(villageId);
+                    if (coord) {
+                        villagesData.push({
+                            "id": villageId,
+                            "url": $(this).find('a').attr('href'),
+                            "coord": coord,
+                            "name": $(this).text().trim(),
+                            "wood": woodTotals[index],
+                            "stone": clayTotals[index],
+                            "iron": ironTotals[index],
+                            "availableMerchants": availableMerchants[index],
+                            "totalMerchants": totalMerchants[index],
+                            "warehouseCapacity": warehouseCapacities[index],
+                        });
+                    }
+                });
+        
+                return villagesData;
+            } catch (error) {
+                console.error("Error fetching player data:", error);
+                return [];
+            }
+        }
+
+        // Helper: Creates village map that maps villageid to village coords
+        function createVillageMap(villageArray) {
+            let villageMap = new Map();
+            for (let i = 0; i < villageArray.length; i++) {
+                let villageId = villageArray[i][0];
+                let villageCoord = villageArray[i][2] + '|' + villageArray[i][3];
+                villageMap.set(parseInt(villageId), villageCoord);
+            }
+            return villageMap;
+        }
+
+        // Helper:  Get Village ID from a coordinate
+        function getVillageIdFromCoord(coord) {
+            try {
+                let village = villageData[coord];
+                return village[0];
+            } catch (error) {
+                console.warn(`No village found for coordinate ${coord}`);
+            }
+        }
+
         function handleInputChange() {
+            const settingsObject = getLocalStorage();
             const inputId = $(this).attr('id');
             let inputValue;
             let matchesCoordinates; // Declare matchesCoordinates once outside the switch statement
@@ -1210,6 +1481,7 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                         $('#sbOriginGroupMenuContainer').show();
                         $('#sbOriginCustomTextAreaContainer').hide();
                     }
+                    settingsObject.sbOriginCustomSelection = false;
                     break;
                 case 'sbOriginCustomSelection':
                     inputValue = $(this).is(':checked');
@@ -1217,6 +1489,7 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                         $('#sbOriginGroupMenuContainer').hide();
                         $('#sbOriginCustomTextAreaContainer').show();
                     }
+                    settingsObject.sbOriginGroupSelection = false;
                     break;
                 case 'sbOriginGroupsFilter':
                     inputValue = $(this).val();
@@ -1227,6 +1500,7 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                         $('#sbTargetGroupMenuContainer').show();
                         $('#sbTargetCustomTextAreaContainer').hide();
                     }
+                    settingsObject.sbTargetCustomSelection = false;
                     break;
                 case 'sbTargetCustomSelection':
                     inputValue = $(this).is(':checked');
@@ -1234,6 +1508,7 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                         $('#sbTargetGroupMenuContainer').hide();
                         $('#sbTargetCustomTextAreaContainer').show();
                     }
+                    settingsObject.sbTargetGroupSelection = false;
                     break;
                 case 'sbTargetGroupsFilter':
                     inputValue = $(this).val();
@@ -1243,21 +1518,33 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                     if (inputValue) {
                         $('#sbSendResourcesAbsolute').show();
                         $('#sbSendResourcesRatio').hide();
+                        $('#sbSendResourcesFill').hide();
                     }
+                    settingsObject.sbSendResourcesRatioRadio = false;
+                    settingsObject.sbSendResourcesMintRatioRadio = false;
+                    settingsObject.sbSendResourcesFillRadio = false;
                     break;
                 case 'sbSendResourcesRatioRadio':
                     inputValue = $(this).is(':checked');
                     if (inputValue) {
                         $('#sbSendResourcesAbsolute').hide();
                         $('#sbSendResourcesRatio').show();
+                        $('#sbSendResourcesFill').hide();
                     }
+                    settingsObject.sbSendResourcesAbsoluteRadio = false;
+                    settingsObject.sbSendResourcesMintRatioRadio = false;
+                    settingsObject.sbSendResourcesFillRadio = false;
                     break;
                 case 'sbSendResourcesMintRatioRadio':
                     inputValue = $(this).is(':checked');
                     if (inputValue) {
                         $('#sbSendResourcesAbsolute').hide();
                         $('#sbSendResourcesRatio').hide();
+                        $('#sbSendResourcesFill').hide();
                     }
+                    settingsObject.sbSendResourcesAbsoluteRadio = false;
+                    settingsObject.sbSendResourcesRatioRadio = false;
+                    settingsObject.sbSendResourcesFillRadio = false;
                     break;
                 case 'sbHoldBackResourcesAbsoluteRadio':
                     inputValue = $(this).is(':checked');
@@ -1265,6 +1552,7 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                         $('#sbHoldBackResourcesAbsolute').show();
                         $('#sbHoldBackResourcesPercentage').hide();
                     }
+                    settingsObject.sbHoldBackResourcesPercentageRadio = false;
                     break;
                 case 'sbHoldBackResourcesPercentageRadio':
                     inputValue = $(this).is(':checked');
@@ -1272,6 +1560,7 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                         $('#sbHoldBackResourcesAbsolute').hide();
                         $('#sbHoldBackResourcesPercentage').show();
                     }
+                    settingsObject.sbHoldBackResourcesAbsoluteRadio = false;
                     break;
                 case 'sbMerchantBonus':
                     inputValue = $(this).is(':checked');
@@ -1420,7 +1709,7 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
             }
         
             if (DEBUG) console.debug(`${scriptInfo}: ${inputId} changed to ${inputValue}`);
-            const settingsObject = getLocalStorage();
+            
             settingsObject[inputId] = inputValue;
             saveLocalStorage(settingsObject);
         }
