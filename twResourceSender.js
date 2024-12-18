@@ -1314,7 +1314,7 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                 const possibleTargets = targetVillages.map(targetVillage => {
                     const travelTime = calculateTravelTime(originVillage.coord, targetVillage, merchantBonus);
                     const arrivalTime = currentTime + travelTime;
-                    const withinArrivalTime = arrivalTimes.some(([start, end]) => arrivalTime >= start && arrivalTime <= end);
+                    const withinArrivalTime = arrivalTimes.length === 0 || arrivalTimes.some(([start, end]) => arrivalTime >= start && arrivalTime <= end);
                     return withinArrivalTime ? { coord: targetVillage, travelTime } : null;
                 }).filter(Boolean);
         
@@ -1386,8 +1386,8 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
             return transportData;
         }
 
-        // Function to calculate sending absolute resources
-        function calculateAbsoluteResources(originVillages, targetVillages) {
+        // Function to calculate sending resources as a ratio
+        function calculateRatioResources(originVillages, targetVillages) {
             const localStorageObject = getLocalStorage();
             const merchantBonus = parseBool(localStorageObject.sbMerchantBonus);
             const holdBackMerchants = Number(localStorageObject.sbHoldBackMerchants);
@@ -1402,10 +1402,10 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
             const maxIron = Number(localStorageObject.sbMaxIron);
             const arrivalTimes = getLocalStorage().sbArrivalTimes;
         
-            // Absolute numbers
-            const woodToSend = Number(localStorageObject.sbSendWood);
-            const clayToSend = Number(localStorageObject.sbSendClay);
-            const ironToSend = Number(localStorageObject.sbSendIron);
+            // Ratios
+            const woodRatio = Number(localStorageObject.sbSendWoodRatio) / 100;
+            const clayRatio = Number(localStorageObject.sbSendClayRatio) / 100;
+            const ironRatio = Number(localStorageObject.sbSendIronRatio) / 100;
         
             const merchantCapacity = merchantBonus ? 1500 : 1000;
         
@@ -1422,9 +1422,9 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                 maxClay,
                 maxIron,
                 arrivalTimes,
-                woodToSend,
-                clayToSend,
-                ironToSend,
+                woodRatio,
+                clayRatio,
+                ironRatio,
                 merchantCapacity
             });
         
@@ -1451,18 +1451,8 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         
             if (DEBUG) console.debug(`${scriptInfo}: Filtered player data:`, filteredPlayerData);
         
-            // Step 2: Remove villages with 0 resources, 0 available merchants, or not enough resources to meet the absolute numbers
-            const validVillages = filteredPlayerData.filter(village => {
-                const totalMerchantCapacity = village.availableMerchants * merchantCapacity;
-                const totalResourcesToSend = woodToSend + clayToSend + ironToSend;
-                return (
-                    village.wood >= woodToSend &&
-                    village.clay >= clayToSend &&
-                    village.iron >= ironToSend &&
-                    village.availableMerchants > 0 &&
-                    totalResourcesToSend <= totalMerchantCapacity
-                );
-            });
+            // Step 2: Remove villages with 0 resources or 0 available merchants
+            const validVillages = filteredPlayerData.filter(village => village.wood > 0 && village.clay > 0 && village.iron > 0 && village.availableMerchants > 0);
         
             if (DEBUG) console.debug(`${scriptInfo}: Valid villages:`, validVillages);
         
@@ -1481,20 +1471,20 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
             // Step 3: Calculate possible origin to target village pairs based on arrival times
             const currentTime = Date.now();
             const originTargetPairs = {};
-        
+            
             validVillages.forEach(originVillage => {
                 const possibleTargets = targetVillages.map(targetVillage => {
                     const travelTime = calculateTravelTime(originVillage.coord, targetVillage, merchantBonus);
                     const arrivalTime = currentTime + travelTime;
-                    const withinArrivalTime = arrivalTimes.some(([start, end]) => arrivalTime >= start && arrivalTime <= end);
+                    const withinArrivalTime = arrivalTimes.length === 0 || arrivalTimes.some(([start, end]) => arrivalTime >= start && arrivalTime <= end);
                     return withinArrivalTime ? { coord: targetVillage, travelTime } : null;
                 }).filter(Boolean);
-        
+            
                 if (possibleTargets.length > 0) {
                     originTargetPairs[originVillage.coord] = possibleTargets.sort((a, b) => a.travelTime - b.travelTime);
                 }
             });
-        
+            
             if (DEBUG) console.debug(`${scriptInfo}: Origin to target pairs:`, originTargetPairs);
         
             // Step 4: Fill the final transport data array
@@ -1505,10 +1495,38 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                 const originVillage = validVillages.find(village => village.coord === originCoord);
                 const targetVillage = originTargetPairs[originCoord][0]; // Select the target village with the lowest travel time
         
+                const totalMerchantCapacity = originVillage.availableMerchants * merchantCapacity;
+        
+                // Calculate the maximum amount of each resource that can be carried by the merchants
+                let maxWoodTransport = totalMerchantCapacity * woodRatio;
+                let maxClayTransport = totalMerchantCapacity * clayRatio;
+                let maxIronTransport = totalMerchantCapacity * ironRatio;
+        
+                // Adjust the amounts based on the available resources
+                let adjustmentFactor = 1;
+                if (maxWoodTransport > originVillage.wood) {
+                    adjustmentFactor = originVillage.wood / maxWoodTransport;
+                    maxWoodTransport *= adjustmentFactor;
+                    maxClayTransport *= adjustmentFactor;
+                    maxIronTransport *= adjustmentFactor;
+                }
+                if (maxClayTransport > originVillage.clay) {
+                    adjustmentFactor = originVillage.clay / maxClayTransport;
+                    maxWoodTransport *= adjustmentFactor;
+                    maxClayTransport *= adjustmentFactor;
+                    maxIronTransport *= adjustmentFactor;
+                }
+                if (maxIronTransport > originVillage.iron) {
+                    adjustmentFactor = originVillage.iron / maxIronTransport;
+                    maxWoodTransport *= adjustmentFactor;
+                    maxClayTransport *= adjustmentFactor;
+                    maxIronTransport *= adjustmentFactor;
+                }
+        
                 const resourcesToSend = {
-                    wood: Math.min(woodToSend, targetVillageResources[targetVillage.coord].wood),
-                    clay: Math.min(clayToSend, targetVillageResources[targetVillage.coord].clay),
-                    iron: Math.min(ironToSend, targetVillageResources[targetVillage.coord].iron)
+                    wood: Math.floor(Math.min(maxWoodTransport, targetVillageResources[targetVillage.coord].wood)),
+                    clay: Math.floor(Math.min(maxClayTransport, targetVillageResources[targetVillage.coord].clay)),
+                    iron: Math.floor(Math.min(maxIronTransport, targetVillageResources[targetVillage.coord].iron))
                 };
         
                 if (resourcesToSend.wood > 0 || resourcesToSend.clay > 0 || resourcesToSend.iron > 0) {
@@ -1533,9 +1551,9 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         
                     // Remove target village from all origin villages if it has no more resources remaining
                     if (
-                        targetVillageResources[targetVillage.coord].wood <= woodToSend ||
-                        targetVillageResources[targetVillage.coord].clay <= clayToSend ||
-                        targetVillageResources[targetVillage.coord].iron <= ironToSend
+                        targetVillageResources[targetVillage.coord].wood <= 0 ||
+                        targetVillageResources[targetVillage.coord].clay <= 0 ||
+                        targetVillageResources[targetVillage.coord].iron <= 0
                     ) {
                         Object.keys(originTargetPairs).forEach(originCoord => {
                             originTargetPairs[originCoord] = originTargetPairs[originCoord].filter(
@@ -1648,7 +1666,7 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                 const possibleTargets = targetVillages.map(targetVillage => {
                     const travelTime = calculateTravelTime(originVillage.coord, targetVillage, merchantBonus);
                     const arrivalTime = currentTime + travelTime;
-                    const withinArrivalTime = arrivalTimes.some(([start, end]) => arrivalTime >= start && arrivalTime <= end);
+                    const withinArrivalTime = arrivalTimes.length === 0 || arrivalTimes.some(([start, end]) => arrivalTime >= start && arrivalTime <= end);
                     return withinArrivalTime ? { coord: targetVillage, travelTime } : null;
                 }).filter(Boolean);
         
@@ -1829,7 +1847,7 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                 const possibleOrigins = filteredPlayerData.map(originVillage => {
                     const travelTime = calculateTravelTime(originVillage.coord, targetVillage, merchantBonus);
                     const arrivalTime = currentTime + travelTime;
-                    const withinArrivalTime = arrivalTimes.some(([start, end]) => arrivalTime >= start && arrivalTime <= end);
+                    const withinArrivalTime = arrivalTimes.length === 0 || arrivalTimes.some(([start, end]) => arrivalTime >= start && arrivalTime <= end);                    
                     return withinArrivalTime ? { coord: originVillage.coord, travelTime } : null;
                 }).filter(Boolean);
         
@@ -2288,8 +2306,8 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                     ? $(pageContent).find(".res.mwood,.warn_90.mwood,.warn.mwood")
                     : $(pageContent).find(".res.wood,.warn_90.wood,.warn.wood");
                 const clayElements = isMobile 
-                    ? $(pageContent).find(".res.mclay,.warn_90.mclay,.warn.mclay")
-                    : $(pageContent).find(".res.clay,.warn_90.clay,.warn.clay");
+                    ? $(pageContent).find(".res.mstone,.warn_90.mstone,.warn.mstone")
+                    : $(pageContent).find(".res.stone,.warn_90.stone,.warn.stone");
                 const ironElements = isMobile 
                     ? $(pageContent).find(".res.miron,.warn_90.miron,.warn.miron")
                     : $(pageContent).find(".res.iron,.warn_90.iron,.warn.iron");
@@ -2369,15 +2387,6 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
             return villageMap;
         }
 
-        // Helper:  Get Village ID from a coordinate
-        function getVillageIdFromCoord(coord) {
-            try {
-                let village = villageData[coord];
-                return village[0];
-            } catch (error) {
-                console.warn(`No village found for coordinate ${coord}`);
-            }
-        }
 
         function handleInputChange() {
             const settingsObject = getLocalStorage();
