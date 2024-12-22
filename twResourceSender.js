@@ -154,7 +154,9 @@ var scriptConfig = {
             'Target': 'Target',
             'Travel Time': 'Travel Time',
             'Send': 'Send',
-            'Total Resources Sent': 'Total Resources Sent'
+            'Total Resources Sent': 'Total Resources Sent',
+            'Fetching player data for more than 1000 villages. This may take a while...' : 'Fetching player data for more than 1000 villages. This may take a while...',
+            'Fetching player data...' : 'Fetching player data...',
         },
         de_DE: {
             'Redirecting...': 'Weiterleiten...',
@@ -215,7 +217,9 @@ var scriptConfig = {
             'Target': 'Ziel',
             'Travel Time': 'Reisezeit',
             'Send': 'Senden',
-            'Total Resources Sent': 'Gesendete Gesamtressourcen'
+            'Total Resources Sent': 'Gesendete Gesamtressourcen',
+            'Fetching player data for more than 1000 villages. This may take a while...' : 'Spielerdaten für mehr als 1000 Dörfer abrufen. Dies kann einige Zeit dauern...',
+            'Fetching player data...' : 'Spielerdaten abrufen...',
         }
     },
     allowedMarkets: [],
@@ -1110,14 +1114,14 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
             let tableBody = $("#transportTableBody");
             transportData.forEach((transport, index) => {
                 // Get the target village id from the coordinates
-                const targetVillageId = villageData[transport.targetCoord];
+                const targetVillageId = villageData[transport.target];
                 let rowClass = index % 2 === 0 ? "evenRow" : "oddRow";
         
                 // Convert travel time from ms to hh:mm:ss format
                 let travelTime = msToTime(transport.travelTime);
         
                 let rowHtml = `
-                    <tr class="${rowClass}">
+                    <tr id="row-${index}" class="${rowClass}">
                         <td><a href="${transport.url}" style="color:#40D0E0;">${transport.name}</a></td>
                         <td>${transport.target}</td>
                         <td>${travelTime}</td>
@@ -1125,7 +1129,7 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                         <td>${transport.clay}<span class="icon header clay"></span></td>
                         <td>${transport.iron}<span class="icon header iron"></span></td>
                         <td style="text-align:center">
-                            <input type="button" class="btn evt-confirm-btn btn-confirm-yes" value="Send" onclick="sendResource(${transport.originId}, '${targetVillageId}', ${transport.wood}, ${transport.clay}, ${transport.iron}, ${index})">
+                            <input type="button" class="btn evt-confirm-btn btn-confirm-yes sendResources" value="Send" onclick="sendResource(${transport.id}, '${targetVillageId}', ${transport.wood}, ${transport.clay}, ${transport.iron}, ${index})">
                         </td>
                     </tr>
                 `;
@@ -1138,20 +1142,23 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         
         // Function to send a resource transport
         // Inspired by shinko to kuma
-        function sendResource(originVillageId, targetVillageId, wood, clay, iron, index) {
+        window.sendResource = function(originVillageId, targetVillageId, wood, clay, iron, index) {
             // Disable all send buttons to prevent multiple sends at the same time
-            $(':button[id^="sendResources"]').prop('disabled', true);
+            $('.sendResources').prop('disabled', true);
         
             // Wait for 200 ms before sending the resources
             setTimeout(function () {
                 // Remove the row from the table
-                $("#" + index)[0].remove();
+                $("#row-" + index).remove();
         
                 // Enable all send buttons
-                $(':button[id^="sendResources"]').prop('disabled', false);
+                $('.sendResources').prop('disabled', false);
         
                 // Focus on the next send button
-                $(":button,#sendResources")[3].focus();
+                const nextButton = $("#transportTableBody input[type='button']").first();
+                if (nextButton.length) {
+                    nextButton.focus();
+                }
         
                 // If there are no more rows left, alert the user and stop the script
                 if ($("#transportTableBody tr").length <= 0) {
@@ -1163,7 +1170,6 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                     throw Error("Done.");
                 }
             }, 200);
-    
         
             // Prepare the data to be sent
             var data = {
@@ -1296,11 +1302,13 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         
             // Initialize remaining resources for each target village
             const targetVillageResources = {};
+            const INFINITE_RESOURCES = Number.MAX_SAFE_INTEGER;
+            
             targetVillages.forEach(targetVillage => {
                 targetVillageResources[targetVillage] = {
-                    wood: maxWood,
-                    clay: maxClay,
-                    iron: maxIron
+                    wood: maxWood === 0 ? INFINITE_RESOURCES : maxWood,
+                    clay: maxClay === 0 ? INFINITE_RESOURCES : maxClay,
+                    iron: maxIron === 0 ? INFINITE_RESOURCES : maxIron
                 };
             });
         
@@ -1309,15 +1317,20 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
             // Step 3: Calculate possible origin to target village pairs based on arrival times
             const currentTime = Date.now();
             const originTargetPairs = {};
-        
+            
             validVillages.forEach(originVillage => {
                 const possibleTargets = targetVillages.map(targetVillage => {
+                    // Skip pairs where the target village and the origin village are the same
+                    if (originVillage.coord === targetVillage) {
+                        return null;
+                    }
+            
                     const travelTime = calculateTravelTime(originVillage.coord, targetVillage, merchantBonus);
                     const arrivalTime = currentTime + travelTime;
                     const withinArrivalTime = arrivalTimes.length === 0 || arrivalTimes.some(([start, end]) => arrivalTime >= start && arrivalTime <= end);
                     return withinArrivalTime ? { coord: targetVillage, travelTime } : null;
                 }).filter(Boolean);
-        
+            
                 if (possibleTargets.length > 0) {
                     originTargetPairs[originVillage.coord] = possibleTargets.sort((a, b) => a.travelTime - b.travelTime);
                 }
@@ -1332,6 +1345,7 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                 const originCoord = Object.keys(originTargetPairs)[0];
                 const originVillage = validVillages.find(village => village.coord === originCoord);
                 const targetVillage = originTargetPairs[originCoord][0]; // Select the target village with the lowest travel time
+
         
                 const resourcesToSend = {
                     wood: Math.min(woodToSend, targetVillageResources[targetVillage.coord].wood),
@@ -1458,11 +1472,13 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         
             // Initialize remaining resources for each target village
             const targetVillageResources = {};
+            const INFINITE_RESOURCES = Number.MAX_SAFE_INTEGER;
+            
             targetVillages.forEach(targetVillage => {
                 targetVillageResources[targetVillage] = {
-                    wood: maxWood,
-                    clay: maxClay,
-                    iron: maxIron
+                    wood: maxWood === 0 ? INFINITE_RESOURCES : maxWood,
+                    clay: maxClay === 0 ? INFINITE_RESOURCES : maxClay,
+                    iron: maxIron === 0 ? INFINITE_RESOURCES : maxIron
                 };
             });
         
@@ -1474,6 +1490,10 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
             
             validVillages.forEach(originVillage => {
                 const possibleTargets = targetVillages.map(targetVillage => {
+                    // Skip pairs where the target village and the origin village are the same
+                    if (originVillage.coord === targetVillage) {
+                        return null;
+                    }
                     const travelTime = calculateTravelTime(originVillage.coord, targetVillage, merchantBonus);
                     const arrivalTime = currentTime + travelTime;
                     const withinArrivalTime = arrivalTimes.length === 0 || arrivalTimes.some(([start, end]) => arrivalTime >= start && arrivalTime <= end);
@@ -1648,11 +1668,13 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         
             // Initialize remaining resources for each target village
             const targetVillageResources = {};
+            const INFINITE_RESOURCES = Number.MAX_SAFE_INTEGER;
+            
             targetVillages.forEach(targetVillage => {
                 targetVillageResources[targetVillage] = {
-                    wood: maxWood,
-                    clay: maxClay,
-                    iron: maxIron
+                    wood: maxWood === 0 ? INFINITE_RESOURCES : maxWood,
+                    clay: maxClay === 0 ? INFINITE_RESOURCES : maxClay,
+                    iron: maxIron === 0 ? INFINITE_RESOURCES : maxIron
                 };
             });
         
@@ -1664,6 +1686,10 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         
             validVillages.forEach(originVillage => {
                 const possibleTargets = targetVillages.map(targetVillage => {
+                    // Skip pairs where the target village and the origin village are the same
+                    if (originVillage.coord === targetVillage) {
+                        return null;
+                    }
                     const travelTime = calculateTravelTime(originVillage.coord, targetVillage, merchantBonus);
                     const arrivalTime = currentTime + travelTime;
                     const withinArrivalTime = arrivalTimes.length === 0 || arrivalTimes.some(([start, end]) => arrivalTime >= start && arrivalTime <= end);
@@ -1827,13 +1853,15 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         
             // Initialize remaining resources for each target village based on warehouseData
             const targetVillageResources = {};
+            const INFINITE_RESOURCES = Number.MAX_SAFE_INTEGER;
+            
             targetVillages.forEach(targetVillage => {
                 const warehouse = warehouseData[targetVillage];
                 const maxStorage = warehouse.maxStorage * (1 - sendGapToMax);
                 targetVillageResources[targetVillage] = {
-                    wood: Math.min(maxWood, Math.max(0, maxStorage - warehouse.wood)),
-                    clay: Math.min(maxClay, Math.max(0, maxStorage - warehouse.clay)),
-                    iron: Math.min(maxIron, Math.max(0, maxStorage - warehouse.iron))
+                    wood: Math.min(maxWood === 0 ? INFINITE_RESOURCES : maxWood, Math.max(0, maxStorage - warehouse.wood)),
+                    clay: Math.min(maxClay === 0 ? INFINITE_RESOURCES : maxClay, Math.max(0, maxStorage - warehouse.clay)),
+                    iron: Math.min(maxIron === 0 ? INFINITE_RESOURCES : maxIron, Math.max(0, maxStorage - warehouse.iron))
                 };
             });
         
@@ -1845,6 +1873,10 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         
             targetVillages.forEach(targetVillage => {
                 const possibleOrigins = filteredPlayerData.map(originVillage => {
+                    // Skip pairs where the target village and the origin village are the same
+                    if (originVillage.coord === targetVillage) {
+                        return null;
+                    }
                     const travelTime = calculateTravelTime(originVillage.coord, targetVillage, merchantBonus);
                     const arrivalTime = currentTime + travelTime;
                     const withinArrivalTime = arrivalTimes.length === 0 || arrivalTimes.some(([start, end]) => arrivalTime >= start && arrivalTime <= end);                    
@@ -2284,15 +2316,19 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
         }
 
         async function getPlayerData() {
-            const url = game_data.player.sitter > 0 
-                ? `game.php?t=${game_data.player.id}&screen=overview_villages&mode=prod&page=-1`
-                : "game.php?&screen=overview_villages&mode=prod&page=-1";
+            const baseUrl = game_data.player.sitter > 0 
+                ? `game.php?t=${game_data.player.id}&screen=overview_villages&mode=prod&group=0&page=`
+                : "game.php?&screen=overview_villages&mode=prod&group=0&page=";
+            const totalVillages = game_data.player.villages;
+            const villagesData = [];
+            const villageIdToCoordMap = new Map(); // Assuming this map is populated elsewhere in the code
         
-            try {
+            // Function to fetch and process data for a single page
+            async function fetchPageData(page) {
+                const url = `${baseUrl}${page}`;
                 const response = await fetch(url);
                 const pageContent = await response.text();
         
-                const villagesData = [];
                 const woodTotals = [];
                 const clayTotals = [];
                 const ironTotals = [];
@@ -2368,6 +2404,40 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                         });
                     }
                 });
+        
+                return villageElements.length; // Return the number of villages processed on this page
+            }
+        
+            try {
+                if (totalVillages <= 1000) {
+                    UI.SuccessMessage(twSDK.tt('Fetching player data...'));
+                    // If the player has less than or equal to 1000 villages, use page=-1 for efficiency
+                    await fetchPageData(-1);
+                } else {
+                    UI.SuccessMessage(twSDK.tt('Fetching player data for more than 1000 villages. This may take a while...'));
+                    let page = 0;
+                    let totalProcessedVillages = 0;
+                    const pageSize = parseInt($("input[name='page_size']").val(), 10);
+        
+                    // Loop through pages until all villages are processed
+                    while (totalProcessedVillages < totalVillages) {
+                        const processedVillages = await fetchPageData(page);
+                        totalProcessedVillages += processedVillages;
+        
+                        // If the number of processed villages is less than the page size, we have reached the last page
+                        if (processedVillages < pageSize) {
+                            break;
+                        }
+        
+                        page++;
+                        await new Promise(resolve => setTimeout(resolve, 200)); // Wait for 200 ms before the next request
+                    }
+                }
+        
+                // Check if we have data for the same number of villages as the player has in the game_data object
+                if (villagesData.length !== totalVillages) {
+                    console.error("Mismatch in the number of villages processed:", villagesData.length, "expected:", totalVillages);
+                }
         
                 return villagesData;
             } catch (error) {
