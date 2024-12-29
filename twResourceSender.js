@@ -2405,7 +2405,10 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                     }
                 });
         
-                return villageElements.length; // Return the number of villages processed on this page
+                // Get the page size from the input field
+                const pageSize = parseInt($(pageContent).find("input[name='page_size']").val(), 10);
+        
+                return { processedVillages: villageElements.length, pageSize }; // Return the number of villages processed and the page size
             }
         
             try {
@@ -2417,28 +2420,27 @@ $.getScript(`https://cdn.jsdelivr.net/gh/SaveBankDev/Tribal-Wars-Scripts-SDK@mai
                     UI.SuccessMessage(twSDK.tt('Fetching player data for more than 1000 villages. This may take a while...'));
                     let page = 0;
                     let totalProcessedVillages = 0;
-                    const pageSize = parseInt($("input[name='page_size']").val(), 10);
-        
+            
                     // Loop through pages until all villages are processed
                     while (totalProcessedVillages < totalVillages) {
-                        const processedVillages = await fetchPageData(page);
+                        const { processedVillages, pageSize } = await fetchPageData(page);
                         totalProcessedVillages += processedVillages;
-        
+            
                         // If the number of processed villages is less than the page size, we have reached the last page
                         if (processedVillages < pageSize) {
                             break;
                         }
-        
+            
                         page++;
                         await new Promise(resolve => setTimeout(resolve, 200)); // Wait for 200 ms before the next request
                     }
                 }
-        
+            
                 // Check if we have data for the same number of villages as the player has in the game_data object
                 if (villagesData.length !== totalVillages) {
                     console.error("Mismatch in the number of villages processed:", villagesData.length, "expected:", totalVillages);
                 }
-        
+            
                 return villagesData;
             } catch (error) {
                 console.error("Error fetching player data:", error);
