@@ -1,7 +1,7 @@
 /*
 * Script Name: Resource Sender
 * Version: v1.0.0
-* Last Updated: 2024-11-26
+* Last Updated: 2026-02-23
 * Author: SaveBank
 * Author Contact: Discord: savebank
 * Contributor:  
@@ -2013,16 +2013,7 @@ var scriptConfig = {
         }
         await twSDK.init(scriptConfig);
         const scriptInfo = twSDK.scriptInfo();
-        /*
-        const isValidScreen = twSDK.checkValidLocation('screen');
-        const isValidMode = twSDK.checkValidLocation('mode');
-        if (!isValidScreen && !isValidMode) {
-            // Redirect to correct screen if necessary
-            UI.InfoMessage(twSDK.tt('Redirecting...'));
-            // twSDK.redirectTo('overview_villages&combined');
-            return;
-        }
-        */
+
         const groups = await fetchVillageGroups();
         const { villages, worldConfig } = await fetchWorldConfigData();
         const villageIdToCoordMap = createVillageMap(villages);
