@@ -2909,7 +2909,7 @@ var scriptConfig = {
         
                 let rowHtml = `
                     <tr id="row-${index}" class="${rowClass}">
-                        <td><a href="${transport.url}" style="color:#40D0E0;">${transport.name}</a></td>
+                        <td><a href="${transport.url}">${transport.name}</a></td>
                         <td>${transport.target}</td>
                         <td>${travelTime}</td>
                         <td>${transport.wood}<span class="icon header wood"></span></td>
