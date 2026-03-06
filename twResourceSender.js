@@ -4122,7 +4122,6 @@ var scriptConfig = {
                 : "game.php?&screen=overview_villages&mode=prod&group=0&page=";
             const totalVillages = game_data.player.villages;
             const villagesData = [];
-            const villageIdToCoordMap = new Map(); // Assuming this map is populated elsewhere in the code
         
             // Function to fetch and process data for a single page
             async function fetchPageData(page) {
