@@ -4037,18 +4037,28 @@ var scriptConfig = {
                                 if (settingsObject[id]) {
                                     $('#sbSendResourcesAbsolute').show();
                                     $('#sbSendResourcesRatio').hide();
+                                    $('#sbSendResourcesFill').hide();
                                 }
                                 break;
                             case 'sbSendResourcesRatioRadio':
                                 if (settingsObject[id]) {
                                     $('#sbSendResourcesAbsolute').hide();
                                     $('#sbSendResourcesRatio').show();
+                                    $('#sbSendResourcesFill').hide();
                                 }
                                 break;
                             case 'sbSendResourcesMintRatioRadio':
                                 if (settingsObject[id]) {
                                     $('#sbSendResourcesAbsolute').hide();
                                     $('#sbSendResourcesRatio').hide();
+                                    $('#sbSendResourcesFill').hide();
+                                }
+                                break;
+                            case 'sbSendResourcesFillRadio':
+                                if (settingsObject[id]) {
+                                    $('#sbSendResourcesAbsolute').hide();
+                                    $('#sbSendResourcesRatio').hide();
+                                    $('#sbSendResourcesFill').show();
                                 }
                                 break;
                             case 'sbHoldBackResourcesAbsoluteRadio':
@@ -4337,6 +4347,17 @@ var scriptConfig = {
                     settingsObject.sbSendResourcesAbsoluteRadio = false;
                     settingsObject.sbSendResourcesRatioRadio = false;
                     settingsObject.sbSendResourcesFillRadio = false;
+                    break;
+                case 'sbSendResourcesFillRadio':
+                    inputValue = $(this).is(':checked');
+                    if (inputValue) {
+                        $('#sbSendResourcesAbsolute').hide();
+                        $('#sbSendResourcesRatio').hide();
+                        $('#sbSendResourcesFill').show();
+                    }
+                    settingsObject.sbSendResourcesAbsoluteRadio = false;
+                    settingsObject.sbSendResourcesRatioRadio = false;
+                    settingsObject.sbSendResourcesMintRatioRadio = false;
                     break;
                 case 'sbHoldBackResourcesAbsoluteRadio':
                     inputValue = $(this).is(':checked');
