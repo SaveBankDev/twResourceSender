@@ -26,7 +26,7 @@
     This notice may not be removed or altered from any source distribution.
  */
 
-scriptUrl = document.currentScript.src;
+var scriptUrl = document.currentScript.src;
 
 window.twSDK = {
     // variables
@@ -1790,7 +1790,7 @@ By uploading a user-generated mod (script) for use with Tribal Wars, the creator
 // User Input
 if (typeof DEBUG !== 'boolean') DEBUG = false;
 // DEFAULT VALUES
-defaultSettings = { 
+var defaultSettings = { 
     'sbOriginGroupSelection': true,
     'sbOriginCustomSelection': false,
     'sbOriginGroupsFilter': 0,
@@ -1817,6 +1817,7 @@ defaultSettings = {
     'sbHoldBackClay': 0,
     'sbHoldBackIron': 0,
     'sbHoldBackPercentage': 0,
+    'sbSendGapToMax': 0,
     'sbMaxWood': 0,
     'sbMaxClay': 0,
     'sbMaxIron': 0,
@@ -1847,6 +1848,7 @@ var allIdsRS = [
     'sbSendIronRatio',
     'sbHoldBackResourcesAbsoluteRadio',
     'sbHoldBackResourcesPercentageRadio',
+    'sbSendGapToMax',
     'sbHoldBackWood',
     'sbHoldBackClay',
     'sbHoldBackIron',
@@ -2377,7 +2379,6 @@ var scriptConfig = {
                         $('#sbSendResourcesRatio').hide();
                         localStorageObject.sbSendResourcesRatioRadio = false;
                         $('#sbSendResourcesMintRatioRadio').prop('checked', false);
-                        $('#sbSendResourcesMintRatio').hide();
                         localStorageObject.sbSendResourcesMintRatioRadio = false;
 
                         saveLocalStorage(localStorageObject);
@@ -2766,7 +2767,7 @@ var scriptConfig = {
                     padding: 8px;
                 }
                 .entry-row:nth-child(even) {
-                    background-color: ##f0e2be;
+                    background-color: #f0e2be;
                 }
                 .entry-row:nth-child(odd) {
                     background-color: #fff5da;
@@ -3694,13 +3695,13 @@ var scriptConfig = {
                     let totalMerchantCapacity = originVillage.availableMerchants * merchantCapacity;
             
                     let woodToSend = Math.min(totalMerchantCapacity, targetVillage.wood, originVillage.wood);
-                    totalMerchantCapacity -= Math.ceil(woodToSend / 1500) * 1500;
+                    totalMerchantCapacity -= Math.ceil(woodToSend / merchantCapacity) * merchantCapacity;
             
                     let clayToSend = Math.min(totalMerchantCapacity, targetVillage.clay, originVillage.clay);
-                    totalMerchantCapacity -= Math.ceil(clayToSend / 1500) * 1500;
+                    totalMerchantCapacity -= Math.ceil(clayToSend / merchantCapacity) * merchantCapacity;
             
                     let ironToSend = Math.min(totalMerchantCapacity, targetVillage.iron, originVillage.iron);
-                    totalMerchantCapacity -= Math.ceil(ironToSend / 1500) * 1500;
+                    totalMerchantCapacity -= Math.ceil(ironToSend / merchantCapacity) * merchantCapacity;
             
                     const resourcesToSend = {
                         wood: woodToSend,
@@ -3743,12 +3744,11 @@ var scriptConfig = {
                                                              Math.ceil(resourcesToSend.iron / merchantCapacity);
         
                         if (DEBUG) console.debug(`${scriptInfo}: Updated origin village resources:`, originVillage);
-            
-                        // Remove origin village from consideration if it has no more resources or merchants available
-                        if (originVillage.wood <= 0 || originVillage.clay <= 0 || originVillage.iron <= 0 || originVillage.availableMerchants <= 0) {
-                            originTargetPairs[targetCoord] = originTargetPairs[targetCoord].filter(origin => origin.coord !== originCoord);
-                            if (DEBUG) console.debug(`${scriptInfo}: Removed origin village from consideration:`, originCoord);
-                        }
+                    }
+                    // Remove origin village from consideration if it has no more resources or merchants available
+                    if (originVillage.wood <= 0 || originVillage.clay <= 0 || originVillage.iron <= 0 || originVillage.availableMerchants <= 0) {
+                        originTargetPairs[targetCoord] = originTargetPairs[targetCoord].filter(origin => origin.coord !== originCoord);
+                        if (DEBUG) console.debug(`${scriptInfo}: Removed origin village from consideration:`, originCoord);
                     }
                 }
             });
@@ -4564,6 +4564,7 @@ var scriptConfig = {
                 'sbHoldBackWood',
                 'sbHoldBackClay',
                 'sbHoldBackIron',
+                'sbSendGapToMax',
                 'sbHoldBackPercentage',
                 'sbMaxWood',
                 'sbMaxClay',
