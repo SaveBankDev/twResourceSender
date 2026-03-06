@@ -2320,7 +2320,7 @@ var scriptConfig = {
                 
                     lines.forEach(line => {
                         line = line.trim();
-                        if (line === '' || !twSDK.coordsRegex.test(line)) {
+                        if (line === '' || !testRegex(line)) {
                             return; // Skip empty lines and lines without coordinates
                         }
 
@@ -3880,6 +3880,15 @@ var scriptConfig = {
                 </fieldset>
             `;
             return contentArrivalTimeSelector;
+        }
+
+        function testRegex(line) {
+            if (typeof line !== 'string') {
+                return false;
+            }
+
+            twSDK.coordsRegex.lastIndex = 0;
+            return twSDK.coordsRegex.test(line);
         }
 
         function parseBool(input) {
