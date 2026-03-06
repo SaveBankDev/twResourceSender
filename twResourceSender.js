@@ -2364,6 +2364,7 @@ var scriptConfig = {
                         
 
                         // Select fill radio button
+                        $('#sbSendResourcesFillRadio').prop('disabled', false);
                         $('#sbSendResourcesFillRadio').prop('checked', true);
                         $('#sbSendResourcesFill').show();
                         localStorageObject.sbSendResourcesFillRadio = true;
@@ -2383,6 +2384,26 @@ var scriptConfig = {
                     } else {
                         $('#sbPasteWarehouseDataSuccess').hide();
                         $('#sbPasteWarehouseDataError').show();
+
+                        const localStorageObject = getLocalStorage();
+
+                        $('#sbSendResourcesFillRadio').prop('disabled', true);
+                        $('#sbSendResourcesFillRadio').prop('checked', false);
+                        $('#sbSendResourcesFill').hide();
+                        localStorageObject.sbSendResourcesFillRadio = false;
+
+                        $('#sbSendResourcesAbsoluteRadio').prop('checked', true);
+                        $('#sbSendResourcesAbsolute').show();
+                        localStorageObject.sbSendResourcesAbsoluteRadio = true;
+
+                        $('#sbSendResourcesRatioRadio').prop('checked', false);
+                        $('#sbSendResourcesRatio').hide();
+                        localStorageObject.sbSendResourcesRatioRadio = false;
+
+                        $('#sbSendResourcesMintRatioRadio').prop('checked', false);
+                        localStorageObject.sbSendResourcesMintRatioRadio = false;
+
+                        saveLocalStorage(localStorageObject);
                     }
                 
                     if ($('#sbPasteWarehouseDataPopup').length > 0) {
@@ -4046,6 +4067,23 @@ var scriptConfig = {
                     }
                 }
             }
+
+            const hasWarehouseData = Object.keys(warehouseData).length > 0;
+            $('#sbSendResourcesFillRadio').prop('disabled', !hasWarehouseData);
+
+            if (!hasWarehouseData && $('#sbSendResourcesFillRadio').is(':checked')) {
+                $('#sbSendResourcesFillRadio').prop('checked', false);
+                $('#sbSendResourcesFill').hide();
+                settingsObject.sbSendResourcesFillRadio = false;
+
+                $('#sbSendResourcesAbsoluteRadio').prop('checked', true);
+                $('#sbSendResourcesAbsolute').show();
+                settingsObject.sbSendResourcesAbsoluteRadio = true;
+                settingsObject.sbSendResourcesRatioRadio = false;
+                settingsObject.sbSendResourcesMintRatioRadio = false;
+
+                saveLocalStorage(settingsObject);
+            }
         }
         // Get villages from group id
         async function getVillagesByGroupId(groupId) {
@@ -4471,6 +4509,8 @@ var scriptConfig = {
 
         function resetInputFields() {
             const localStorageSettings = getLocalStorage();
+
+            warehouseData = {};
         
             for (let key in defaultSettings) {
                 if (defaultSettings.hasOwnProperty(key)) {
@@ -4486,6 +4526,11 @@ var scriptConfig = {
                     }
                 }
             }
+
+            $('#sbSendResourcesFillRadio').prop('disabled', true);
+            $('#sbSendResourcesFill').hide();
+            $('#sbPasteWarehouseDataSuccess').hide();
+            $('#sbPasteWarehouseDataError').hide();
         
             saveLocalStorage(localStorageSettings);
             initializeInputFields();
