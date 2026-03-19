@@ -1939,7 +1939,11 @@ var scriptConfig = {
             'Absolute send exceeds max resource per target village setting.' : 'Absolute send exceeds max resource per target village setting.',
             'Not enough total origin resources to fulfill absolute target demand.' : 'Not enough total origin resources to fulfill absolute target demand.',
             'Not enough total merchant capacity to fulfill absolute target demand.' : 'Not enough total merchant capacity to fulfill absolute target demand.',
-            'Unable to fully satisfy all absolute target demands with current resources/merchants/arrival windows.' : 'Unable to fully satisfy all absolute target demands with current resources/merchants/arrival windows.'
+            'Unable to fully satisfy all absolute target demands with current resources/merchants/arrival windows.' : 'Unable to fully satisfy all absolute target demands with current resources/merchants/arrival windows.',
+            'There was an error!': 'There was an error!',
+            'Missing warehouse data for one or more selected target villages. Please paste warehouse data again.': 'Missing warehouse data for one or more selected target villages. Please paste warehouse data again.',
+            'Not enough total origin resources to fulfill fill target demand.' : 'Not enough total origin resources to fulfill fill target demand.',
+            'Not enough total merchant capacity to fulfill fill target demand.' : 'Not enough total merchant capacity to fulfill fill target demand.',
         },
         de_DE: {
             'Redirecting...': 'Weiterleiten...',
@@ -2007,6 +2011,10 @@ var scriptConfig = {
             'Not enough total origin resources to fulfill absolute target demand.' : 'Nicht genügend Ressourcen in den Herkunftsdörfern, um die absolute Nachfrage der Zieldörfer zu erfüllen.',
             'Not enough total merchant capacity to fulfill absolute target demand.' : 'Nicht genügend Händlerkapazität, um die absolute Nachfrage der Zieldörfer zu erfüllen.',
             'Unable to fully satisfy all absolute target demands with current resources/merchants/arrival windows.' : 'Es ist nicht möglich, alle absoluten Zielanforderungen mit den aktuellen Ressourcen/Händlern/Ankunftszeiten vollständig zu erfüllen.',
+            'There was an error!': 'Es gab einen Fehler!',
+            'Missing warehouse data for one or more selected target villages. Please paste warehouse data again.': 'Fehlende Speicherdaten für ein oder mehrere ausgewählte Zieldörfer. Bitte fügen Sie die Speicherdaten erneut ein.',
+            'Not enough total origin resources to fulfill fill target demand.' : 'Nicht genügend Ressourcen in den Herkunftsdörfern, um die Nachfrage der Zieldörfer zu erfüllen.',
+            'Not enough total merchant capacity to fulfill fill target demand.' : 'Nicht genügend Händlerkapazität, um die Nachfrage der Zieldörfer zu erfüllen.',
         }
     },
     allowedMarkets: [],
