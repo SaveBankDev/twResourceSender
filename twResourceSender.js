@@ -2941,7 +2941,7 @@ var scriptConfig = {
                         <td>${transport.target}</td>
                         <td>${travelTime}</td>
                         <td>${transport.wood}<span class="icon header wood"></span></td>
-                        <td>${transport.clay}<span class="icon header clay"></span></td>
+                        <td>${transport.clay}<span class="icon header stone"></span></td>
                         <td>${transport.iron}<span class="icon header iron"></span></td>
                         <td style="text-align:center">
                             <input type="button" class="btn evt-confirm-btn btn-confirm-yes sendResources" value="Send" onclick="sendResource(${transport.id}, '${targetVillageId}', ${transport.wood}, ${transport.clay}, ${transport.iron}, ${index})">
@@ -3207,13 +3207,40 @@ var scriptConfig = {
                     const { village: originVillage, travelTime } = eligibleOrigins[0];
                     let remainingCapacity = originVillage.availableMerchants * merchantCapacity;
 
-                    const wood = Math.min(demand.wood, originVillage.wood, remainingCapacity);
-                    remainingCapacity -= wood;
+                    // Balanced round-robin allocation: distribute capacity evenly across resources
+                    let wood = 0, clay = 0, iron = 0;
+                    while (remainingCapacity > 0) {
+                        const chunkSize = Math.min(remainingCapacity, merchantCapacity);
+                        const availableResources = [
+                            demand.wood - wood > 0 && originVillage.wood - wood > 0,
+                            demand.clay - clay > 0 && originVillage.clay - clay > 0,
+                            demand.iron - iron > 0 && originVillage.iron - iron > 0
+                        ];
+                        const activeCount = availableResources.filter(Boolean).length;
+                        if (activeCount === 0) break;
 
-                    const clay = Math.min(demand.clay, originVillage.clay, remainingCapacity);
-                    remainingCapacity -= clay;
+                        const perResource = Math.floor(chunkSize / activeCount);
+                        let spent = 0;
 
-                    const iron = Math.min(demand.iron, originVillage.iron, remainingCapacity);
+                        if (availableResources[0]) {
+                            const add = Math.min(perResource, demand.wood - wood, originVillage.wood - wood);
+                            wood += add;
+                            spent += add;
+                        }
+                        if (availableResources[1]) {
+                            const add = Math.min(perResource, demand.clay - clay, originVillage.clay - clay);
+                            clay += add;
+                            spent += add;
+                        }
+                        if (availableResources[2]) {
+                            const add = Math.min(perResource, demand.iron - iron, originVillage.iron - iron);
+                            iron += add;
+                            spent += add;
+                        }
+
+                        if (spent === 0) break;
+                        remainingCapacity -= spent;
+                    }
 
                     const totalToSend = wood + clay + iron;
                     if (totalToSend <= 0) {
@@ -3891,15 +3918,42 @@ var scriptConfig = {
                     }
             
                     let remainingCapacity = originVillage.availableMerchants * merchantCapacity;
-            
-                    const woodToSend = Math.min(remainingCapacity, targetVillage.wood, originVillage.wood);
-                    remainingCapacity -= woodToSend;
-            
-                    const clayToSend = Math.min(remainingCapacity, targetVillage.clay, originVillage.clay);
-                    remainingCapacity -= clayToSend;
-            
-                    const ironToSend = Math.min(remainingCapacity, targetVillage.iron, originVillage.iron);
-            
+
+                    // Balanced round-robin allocation: distribute capacity evenly across resources
+                    let woodToSend = 0, clayToSend = 0, ironToSend = 0;
+                    while (remainingCapacity > 0) {
+                        const chunkSize = Math.min(remainingCapacity, merchantCapacity);
+                        const availableResources = [
+                            targetVillage.wood - woodToSend > 0 && originVillage.wood - woodToSend > 0,
+                            targetVillage.clay - clayToSend > 0 && originVillage.clay - clayToSend > 0,
+                            targetVillage.iron - ironToSend > 0 && originVillage.iron - ironToSend > 0
+                        ];
+                        const activeCount = availableResources.filter(Boolean).length;
+                        if (activeCount === 0) break;
+
+                        const perResource = Math.floor(chunkSize / activeCount);
+                        let spent = 0;
+
+                        if (availableResources[0]) {
+                            const add = Math.min(perResource, targetVillage.wood - woodToSend, originVillage.wood - woodToSend);
+                            woodToSend += add;
+                            spent += add;
+                        }
+                        if (availableResources[1]) {
+                            const add = Math.min(perResource, targetVillage.clay - clayToSend, originVillage.clay - clayToSend);
+                            clayToSend += add;
+                            spent += add;
+                        }
+                        if (availableResources[2]) {
+                            const add = Math.min(perResource, targetVillage.iron - ironToSend, originVillage.iron - ironToSend);
+                            ironToSend += add;
+                            spent += add;
+                        }
+
+                        if (spent === 0) break;
+                        remainingCapacity -= spent;
+                    }
+
                     const resourcesToSend = {
                         wood: woodToSend,
                         clay: clayToSend,
