@@ -2940,11 +2940,11 @@ var scriptConfig = {
                         <td><a href="${transport.url}">${transport.name}</a></td>
                         <td>${transport.target}</td>
                         <td>${travelTime}</td>
-                        <td>${transport.wood}<span class="icon header wood"></span></td>
-                        <td>${transport.clay}<span class="icon header stone"></span></td>
-                        <td>${transport.iron}<span class="icon header iron"></span></td>
+                        <td>${Math.floor(transport.wood)}<span class="icon header wood"></span></td>
+                        <td>${Math.floor(transport.clay)}<span class="icon header stone"></span></td>
+                        <td>${Math.floor(transport.iron)}<span class="icon header iron"></span></td>
                         <td style="text-align:center">
-                            <input type="button" class="btn evt-confirm-btn btn-confirm-yes sendResources" value="Send" onclick="sendResource(${transport.id}, '${targetVillageId}', ${transport.wood}, ${transport.clay}, ${transport.iron}, ${index})">
+                            <input type="button" class="btn evt-confirm-btn btn-confirm-yes sendResources" value="Send" onclick="sendResource(${transport.id}, '${targetVillageId}', ${Math.floor(transport.wood)}, ${Math.floor(transport.clay)}, ${Math.floor(transport.iron)}, ${index})">
                         </td>
                     </tr>
                 `;
@@ -3006,9 +3006,9 @@ var scriptConfig = {
                 if (DEBUG) console.debug(`${scriptInfo}: Resources sent:`, data);
         
                 // Update the total resources sent
-                totalWoodSent += wood;
-                totalClaySent += clay;
-                totalIronSent += iron;
+                totalWoodSent += Math.floor(wood);
+                totalClaySent += Math.floor(clay);
+                totalIronSent += Math.floor(iron);
         
                 // Update the UI with the total resources sent
                 $("#totalWoodSent").eq(0).text(`${convertToNumberWithDots(totalWoodSent)}`);
