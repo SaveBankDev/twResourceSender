@@ -1944,6 +1944,9 @@ var scriptConfig = {
             'Missing warehouse data for one or more selected target villages. Please paste warehouse data again.': 'Missing warehouse data for one or more selected target villages. Please paste warehouse data again.',
             'Not enough total origin resources to fulfill fill target demand.' : 'Not enough total origin resources to fulfill fill target demand.',
             'Not enough total merchant capacity to fulfill fill target demand.' : 'Not enough total merchant capacity to fulfill fill target demand.',
+            'Unable to fully fill all target villages.' : 'Unable to fully fill all target villages.',
+            'Short on: ' : 'Short on: ',
+            'Try adjusting hold-back, arrival times, or origin villages.' : 'Try adjusting hold-back, arrival times, or origin villages.',
         },
         de_DE: {
             'Redirecting...': 'Weiterleiten...',
@@ -2015,6 +2018,9 @@ var scriptConfig = {
             'Missing warehouse data for one or more selected target villages. Please paste warehouse data again.': 'Fehlende Speicherdaten für ein oder mehrere ausgewählte Zieldörfer. Bitte fügen Sie die Speicherdaten erneut ein.',
             'Not enough total origin resources to fulfill fill target demand.' : 'Nicht genügend Ressourcen in den Herkunftsdörfern, um die Nachfrage der Zieldörfer zu erfüllen.',
             'Not enough total merchant capacity to fulfill fill target demand.' : 'Nicht genügend Händlerkapazität, um die Nachfrage der Zieldörfer zu erfüllen.',
+            'Unable to fully fill all target villages.' : 'Nicht alle Zieldörfer konnten vollständig aufgefüllt werden.',
+            'Short on: ' : 'Es fehlt: ',
+            'Try adjusting hold-back, arrival times, or origin villages.' : 'Versuche zurückgehaltene Resourcen, Ankunftszeiten oder Herkunftsdörfer anzupassen.',
         }
     },
     allowedMarkets: [],
@@ -4010,6 +4016,22 @@ var scriptConfig = {
             });
         
             if (DEBUG) console.debug(`${scriptInfo}: Transport Data:`, transportData);
+
+            // Fulfillment check: verify all target demands were fully met
+            const unfulfilledTargets = Object.keys(targetVillageResources).filter(tc => {
+                const t = targetVillageResources[tc];
+                return t.wood > 0 || t.clay > 0 || t.iron > 0;
+            });
+
+            if (unfulfilledTargets.length > 0) {
+                if (DEBUG) console.debug(`${scriptInfo}: Unfulfilled fill targets:`, unfulfilledTargets.map(tc => ({ coord: tc, remaining: targetVillageResources[tc] })));
+                const shortOn = [];
+                if (unfulfilledTargets.some(tc => targetVillageResources[tc].wood > 0)) shortOn.push(twSDK.tt('Wood'));
+                if (unfulfilledTargets.some(tc => targetVillageResources[tc].clay > 0)) shortOn.push(twSDK.tt('Clay'));
+                if (unfulfilledTargets.some(tc => targetVillageResources[tc].iron > 0)) shortOn.push(twSDK.tt('Iron'));
+                UI.ErrorMessage(twSDK.tt('Unable to fully fill all target villages.') + ' ' + twSDK.tt('Short on: ') + shortOn.join(', ') + '. ' + twSDK.tt('Try adjusting hold-back, arrival times, or origin villages.'));
+                return [];
+            }
         
             return transportData;
         }
