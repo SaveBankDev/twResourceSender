@@ -1946,7 +1946,7 @@ var scriptConfig = {
             'Not enough total merchant capacity to fulfill fill target demand.' : 'Not enough total merchant capacity to fulfill fill target demand.',
             'Unable to fully fill all target villages.' : 'Unable to fully fill all target villages.',
             'Short on: ' : 'Short on: ',
-            'Try adjusting hold-back, arrival times, or origin villages.' : 'Try adjusting hold-back, arrival times, or origin villages.',
+            'Try adjusting hold-back, gap to max, arrival times, or origin villages.' : 'Try adjusting hold-back, gap to max, arrival times, or origin villages.',
         },
         de_DE: {
             'Redirecting...': 'Weiterleiten...',
@@ -2020,7 +2020,7 @@ var scriptConfig = {
             'Not enough total merchant capacity to fulfill fill target demand.' : 'Nicht genügend Händlerkapazität, um die Nachfrage der Zieldörfer zu erfüllen.',
             'Unable to fully fill all target villages.' : 'Nicht alle Zieldörfer konnten vollständig aufgefüllt werden.',
             'Short on: ' : 'Es fehlt: ',
-            'Try adjusting hold-back, arrival times, or origin villages.' : 'Versuche zurückgehaltene Resourcen, Ankunftszeiten oder Herkunftsdörfer anzupassen.',
+            'Try adjusting hold-back, gap to max, arrival times, or origin villages.' : 'Versuche zurückgehaltene Resourcen, Abstand zum Maximum, Ankunftszeiten oder Herkunftsdörfer anzupassen.',
         }
     },
     allowedMarkets: [],
@@ -4029,7 +4029,7 @@ var scriptConfig = {
                 if (unfulfilledTargets.some(tc => targetVillageResources[tc].wood > 0)) shortOn.push(twSDK.tt('Wood'));
                 if (unfulfilledTargets.some(tc => targetVillageResources[tc].clay > 0)) shortOn.push(twSDK.tt('Clay'));
                 if (unfulfilledTargets.some(tc => targetVillageResources[tc].iron > 0)) shortOn.push(twSDK.tt('Iron'));
-                UI.ErrorMessage(twSDK.tt('Unable to fully fill all target villages.') + ' ' + twSDK.tt('Short on: ') + shortOn.join(', ') + '. ' + twSDK.tt('Try adjusting hold-back, arrival times, or origin villages.'));
+                UI.ErrorMessage(twSDK.tt('Unable to fully fill all target villages.') + ' ' + twSDK.tt('Short on: ') + shortOn.join(', ') + '. ' + twSDK.tt('Try adjusting hold-back, gap to max, arrival times, or origin villages.'));
                 return [];
             }
         
