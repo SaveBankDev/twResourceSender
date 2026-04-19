@@ -3382,8 +3382,9 @@ var scriptConfig = {
             if (DEBUG) console.debug(`${scriptInfo}: Filtered player data:`, filteredPlayerData);
         
             // Step 2: Remove villages with 0 resources or 0 available merchants
-            const validVillages = filteredPlayerData.filter(village => village.wood > 0 && village.clay > 0 && village.iron > 0 && village.availableMerchants > 0);
+            const validVillages = filteredPlayerData.filter(village => (village.wood > 0 || village.clay > 0 || village.iron > 0) && village.availableMerchants > 0);
         
+
             if (DEBUG) console.debug(`${scriptInfo}: Valid villages:`, validVillages);
         
             // Initialize remaining resources for each target village
@@ -3524,9 +3525,9 @@ var scriptConfig = {
                 // Keep origin only while it can still create ratio-valid shipments.
                 if (
                     originVillage.availableMerchants <= 0 ||
-                    originVillage.wood <= 0 ||
-                    originVillage.clay <= 0 ||
-                    originVillage.iron <= 0 ||
+                    (woodRatio > 0 && originVillage.wood <= 0) ||
+                    (clayRatio > 0 && originVillage.clay <= 0) ||
+                    (ironRatio > 0 && originVillage.iron <= 0) ||
                     !originTargetPairs[originCoord] ||
                     originTargetPairs[originCoord].length === 0
                 ) {
